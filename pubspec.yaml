@@ -1,0 +1,64 @@
+name: worddeck
+description: Learn new words with smart flashcards powered by AI and spaced repetition.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.0
+  riverpod_annotation: ^2.3.0
+
+  # Navigation
+  go_router: ^14.0.0
+
+  # Backend / Auth
+  supabase_flutter: ^2.5.0
+
+  # Networking
+  dio: ^5.4.0
+
+  # Data models
+  freezed_annotation: ^2.4.0
+  json_annotation: ^4.9.0
+
+  # Storage
+  flutter_secure_storage: ^9.2.0
+  shared_preferences: ^2.2.0
+
+  # Push notifications
+  firebase_core: ^3.0.0
+  firebase_messaging: ^15.0.0
+  flutter_local_notifications: ^17.0.0
+
+  # UI
+  flutter_animate: ^4.5.0
+  google_fonts: ^6.1.0
+
+  # Connectivity
+  connectivity_plus: ^6.0.0
+
+  # Utilities
+  equatable: ^2.0.5
+  flutter_dotenv: ^5.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  build_runner: ^2.4.0
+  freezed: ^2.5.0
+  json_serializable: ^6.8.0
+  riverpod_generator: ^2.4.0
+  mockito: ^5.4.0
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
