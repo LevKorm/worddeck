@@ -40,6 +40,10 @@ enum DeckSortOption {
   }
 }
 
+// ── View mode ────────────────────────────────────────────────────────────────
+
+enum DeckViewMode { big, standard, stream }
+
 // ── Simple state providers ────────────────────────────────────────────────────
 
 final deckStatusFilterProvider =
@@ -60,6 +64,11 @@ final deckSelectedCardsProvider =
 /// Set of selected CEFR levels. Empty = show all.
 final deckCefrFilterProvider =
     StateProvider<Set<String>>((ref) => {});
+
+final deckViewModeProvider =
+    StateProvider<DeckViewMode>((ref) => DeckViewMode.standard);
+
+final deckCefrGroupingProvider = StateProvider<bool>((ref) => true);
 
 // ── Filtered + sorted card list ───────────────────────────────────────────────
 

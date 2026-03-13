@@ -6,9 +6,13 @@ import '../../core/constants/level_definitions.dart';
 import '../../core/theme/app_theme.dart' as app_theme;
 import 'package:go_router/go_router.dart';
 import '../../modules/cards/card_provider.dart';
+import '../../providers/cefr_level_provider.dart';
 import '../../providers/statistics_provider.dart';
 import '../../widgets/cefr_badge.dart';
 import '../../widgets/mastery_breakdown.dart';
+import '../../widgets/stats/level_hero_card.dart';
+import '../../widgets/stats/level_journey_list.dart';
+import '../../widgets/stats/level_tips_card.dart';
 import '../../widgets/stats_card.dart';
 import 'stats_controller.dart';
 
@@ -19,6 +23,7 @@ class StatsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final stats        = ref.watch(fullStatisticsProvider);
     final cefrBreakdown = ref.watch(cefrBreakdownProvider);
+    final cefrLevel    = ref.watch(cefrLevelProvider);
     final isRefreshing = ref.watch(statsControllerProvider);
     final theme        = Theme.of(context);
 
@@ -40,6 +45,35 @@ class StatsScreen extends ConsumerWidget {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 children: [
+                  // ── YOUR LEVEL section ────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                    child: Text(
+                      'YOUR LEVEL',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textDim,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                  LevelHeroCard(level: cefrLevel)
+                      .animate()
+                      .fade(duration: 400.ms)
+                      .slideY(begin: 0.1, end: 0, duration: 400.ms),
+                  const SizedBox(height: 20),
+                  LevelJourneyList(level: cefrLevel)
+                      .animate(delay: 100.ms)
+                      .fade(duration: 400.ms)
+                      .slideY(begin: 0.1, end: 0, duration: 400.ms),
+                  const SizedBox(height: 16),
+                  const LevelTipsCard()
+                      .animate(delay: 200.ms)
+                      .fade(duration: 400.ms)
+                      .slideY(begin: 0.1, end: 0, duration: 400.ms),
+                  const SizedBox(height: 24),
+
                   // Level badge → Achievements page
                   _LevelNavRow(ref: ref),
                   const SizedBox(height: 12),

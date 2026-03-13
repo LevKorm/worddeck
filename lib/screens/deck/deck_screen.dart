@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,7 +9,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/shimmer_widget.dart';
-import '../../models/collection.dart';
 import '../../models/flash_card.dart';
 import '../../modules/cards/card_provider.dart';
 import '../../modules/collections/collection_provider.dart';
@@ -18,6 +16,13 @@ import '../../providers/deck_filter_providers.dart';
 import '../../widgets/move_to_collection_sheet.dart';
 import '../../widgets/progress_ring.dart';
 import '../../widgets/word_card.dart';
+import '../../widgets/deck/big_word_card.dart';
+import '../../widgets/deck/cefr_accordion.dart';
+import '../../widgets/deck/cefr_milestone_bar.dart';
+import '../../widgets/deck/collection_tabs.dart';
+import '../../widgets/deck/sort_filter_dropdown.dart';
+import '../../widgets/deck/stream_word_row.dart';
+import '../../widgets/deck/view_mode_toggle.dart';
 import '../shell/shell_screen.dart';
 import 'deck_controller.dart';
 
@@ -36,6 +41,9 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
 
   // Swipe-to-delete: pending deletes with undo
   final Map<String, _PendingDelete> _pendingDeletes = {};
+
+  // CEFR accordion expanded state
+  Set<String> _expandedCefrLevels = {'A1', 'A2', 'B1'};
 
   @override
   void initState() {
@@ -189,20 +197,14 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 16),
-                // Header skeleton
                 Row(
                   children: [
                     const ShimmerWidget(width: 100, height: 28, borderRadius: 8),
                     const Spacer(),
                     ShimmerWidget(width: 28, height: 28, borderRadius: 14),
-                    const SizedBox(width: 10),
-                    ShimmerWidget(width: 28, height: 28, borderRadius: 14),
-                    const SizedBox(width: 10),
-                    ShimmerWidget(width: 28, height: 28, borderRadius: 14),
                   ],
                 ),
                 const SizedBox(height: 16),
-                // Status pills skeleton
                 Row(
                   children: List.generate(4, (i) => Padding(
                     padding: const EdgeInsets.only(right: 8),
@@ -214,7 +216,6 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
                   )),
                 ),
                 const SizedBox(height: 20),
-                // Card skeletons
                 ...List.generate(5, (i) => Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: ShimmerWidget(
@@ -238,138 +239,310 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
     final allCards = cardState.allCards;
     final collections = ref.watch(collectionProvider).collections;
     final collectionFilter = ref.watch(deckCollectionFilterProvider);
+    final viewMode = ref.watch(deckViewModeProvider);
+    final cefrGrouping = ref.watch(deckCefrGroupingProvider);
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
       backgroundColor: AppColors.bg,
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              SafeArea(
-                bottom: false,
-                child: isSelectMode
-                    ? _SelectHeader(
-                        selectedCount: selectedCards.length,
-                        onCancel: _exitSelectMode,
-                        onMove: _moveSelected,
-                        onDelete: _deleteSelected,
-                      )
-                    : _Header(
-                        wordCount: allCards.length,
-                        searchVisible: _searchVisible,
-                        sortOption: sortOption,
-                        onSearchToggle: () =>
-                            setState(() => _searchVisible = !_searchVisible),
-                        onSortChanged: (opt) =>
-                            ref.read(deckSortProvider.notifier).state = opt,
-                        searchController: _searchController,
-                        searchQuery: deckState.searchQuery,
-                        onSearchChanged: (q) =>
-                            ref.read(deckControllerProvider.notifier).setSearch(q),
-                      ),
-              ),
-              _StatusFilterPills(
-                selected: statusFilter,
-                onChanged: (f) =>
-                    ref.read(deckStatusFilterProvider.notifier).state = f,
-              ),
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: _refresh,
-                  child: CustomScrollView(
-                    controller: _scrollController,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    slivers: [
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            // ── Header ──────────────────────────────────────────────
+            isSelectMode
+                ? _SelectHeader(
+                    selectedCount: selectedCards.length,
+                    onCancel: _exitSelectMode,
+                    onMove: _moveSelected,
+                    onDelete: _deleteSelected,
+                  )
+                : _Header(
+                    wordCount: allCards.length,
+                    searchVisible: _searchVisible,
+                    onSearchToggle: () =>
+                        setState(() => _searchVisible = !_searchVisible),
+                    searchController: _searchController,
+                    searchQuery: deckState.searchQuery,
+                    onSearchChanged: (q) =>
+                        ref.read(deckControllerProvider.notifier).setSearch(q),
+                  ),
+
+            // ── Scrollable content ──────────────────────────────────
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _refresh,
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    // ── CEFR Milestone Bar ─────────────────────────────
+                    if (allCards.isNotEmpty)
                       SliverToBoxAdapter(
-                        child: _TodaysFocusCarousel(allCards: allCards),
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 8, bottom: 12),
+                          child: const CefrMilestoneBar(),
+                        ),
                       ),
-                      if (filteredCards.isEmpty)
-                        SliverToBoxAdapter(
-                          child: SizedBox(
-                            height: 300,
-                            child: _EmptyState(
-                              hasSearch: deckState.searchQuery.isNotEmpty,
+
+                    // ── Today's Focus Carousel ────────────────────────
+                    SliverToBoxAdapter(
+                      child: _TodaysFocusCarousel(allCards: allCards),
+                    ),
+
+                    // ── Collection Tabs ───────────────────────────────
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: CollectionTabs(
+                          collections: collections,
+                          selected: collectionFilter,
+                          onSelected: (id) =>
+                              ref.read(deckCollectionFilterProvider.notifier).state = id,
+                        ),
+                      ),
+                    ),
+
+                    // ── Toolbar Row ───────────────────────────────────
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                        child: Row(
+                          children: [
+                            SortFilterDropdown(
+                              sortOption: sortOption,
+                              statusFilter: statusFilter,
+                              onSortChanged: (v) =>
+                                  ref.read(deckSortProvider.notifier).state = v,
+                              onStatusChanged: (v) =>
+                                  ref.read(deckStatusFilterProvider.notifier).state = v,
                             ),
-                          ),
-                        )
-                      else
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                          sliver: SliverList.separated(
-                            itemCount: filteredCards.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 6),
-                            itemBuilder: (context, i) {
-                              final card = filteredCards[i];
+                            const SizedBox(width: 8),
+                            _CefrToggle(
+                              isActive: cefrGrouping,
+                              onTap: () => ref
+                                  .read(deckCefrGroupingProvider.notifier)
+                                  .state = !cefrGrouping,
+                            ),
+                            const Spacer(),
+                            ViewModeToggle(
+                              mode: viewMode,
+                              onChanged: (v) =>
+                                  ref.read(deckViewModeProvider.notifier).state = v,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
 
-                              // Show undo placeholder for pending deletes
-                              if (_pendingDeletes.containsKey(card.id)) {
-                                return _UndoRow(
-                                  word: card.word,
-                                  onUndo: () => _undoDelete(card.id),
-                                );
-                              }
-
-                              final collection = ref.watch(
-                                collectionByIdProvider(card.collectionId),
-                              );
-                              final wordCard = WordCard(
-                                key: ValueKey('wc_${card.id}'),
-                                word: card.word,
-                                translation: card.translation,
-                                progress: cardProgress(card),
-                                masteryLabel: masteryLabelFor(card),
-                                nextReviewDate: card.nextReview,
-                                collectionName: collection?.name,
-                                collectionColor: collection?.flutterColor,
-                                cefrLevel: card.cefrLevel,
-                                isSelectMode: isSelectMode,
-                                isSelected: selectedCards.contains(card.id),
-                                onTap: isSelectMode
-                                    ? () => _toggleSelect(card.id)
-                                    : () => context.push('/word', extra: card),
-                                onLongPress: isSelectMode
-                                    ? null
-                                    : () => _enterSelectMode(card.id),
-                              );
-                              final Widget item = isSelectMode
-                                  ? wordCard
-                                  : _SwipeToDelete(
-                                      onDeleted: () =>
-                                          _markPendingDelete(card),
-                                      child: wordCard,
-                                    );
-                              return item;
-                            },
+                    // ── Card List ─────────────────────────────────────
+                    if (filteredCards.isEmpty)
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: 300,
+                          child: _EmptyState(
+                            hasSearch: deckState.searchQuery.isNotEmpty,
                           ),
                         ),
-                      SliverToBoxAdapter(
-                        child: SizedBox(height: 100 + safeBottom + 60),
-                      ),
-                    ],
-                  ),
+                      )
+                    else if (cefrGrouping)
+                      _buildCefrGroupedList(filteredCards, viewMode, isSelectMode, selectedCards)
+                    else
+                      _buildFlatList(filteredCards, viewMode, isSelectMode, selectedCards, true),
+
+                    // ── Bottom padding ────────────────────────────────
+                    SliverToBoxAdapter(
+                      child: SizedBox(height: 100 + safeBottom),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-
-          // ── Collection island ─────────────────────────────────────────────
-          Positioned(
-            bottom: 82 + safeBottom,
-            left: 16,
-            right: 16,
-            child: Center(
-              child: _CollectionIsland(
-                collections: collections,
-                selected: collectionFilter,
-                onSelected: (id) =>
-                    ref.read(deckCollectionFilterProvider.notifier).state = id,
-              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildCefrGroupedList(
+    List<FlashCard> cards,
+    DeckViewMode viewMode,
+    bool isSelectMode,
+    Set<String> selectedCards,
+  ) {
+    final grouped = groupByCefr(cards);
+
+    // Auto-expand first 3 non-empty levels on initial build
+    if (_expandedCefrLevels.isEmpty && grouped.isNotEmpty) {
+      _expandedCefrLevels = grouped.keys.take(3).toSet();
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      sliver: SliverList.separated(
+        itemCount: grouped.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, i) {
+          final entry = grouped.entries.elementAt(i);
+          final level = entry.key;
+          final levelCards = entry.value;
+          final isExpanded = _expandedCefrLevels.contains(level);
+
+          return CefrAccordionGroup(
+            level: level,
+            count: levelCards.length,
+            isExpanded: isExpanded,
+            onToggle: () {
+              setState(() {
+                if (isExpanded) {
+                  _expandedCefrLevels.remove(level);
+                } else {
+                  _expandedCefrLevels.add(level);
+                }
+              });
+            },
+            child: _buildCardColumn(levelCards, viewMode, isSelectMode, selectedCards, false),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFlatList(
+    List<FlashCard> cards,
+    DeckViewMode viewMode,
+    bool isSelectMode,
+    Set<String> selectedCards,
+    bool showCefr,
+  ) {
+    if (viewMode == DeckViewMode.stream) {
+      return SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        sliver: SliverList.builder(
+          itemCount: cards.length,
+          itemBuilder: (context, i) =>
+              _buildStreamRow(cards[i], showCefr),
+        ),
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      sliver: SliverList.separated(
+        itemCount: cards.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 6),
+        itemBuilder: (context, i) =>
+            _buildCardItem(cards[i], viewMode, isSelectMode, selectedCards, showCefr),
+      ),
+    );
+  }
+
+  Widget _buildCardColumn(
+    List<FlashCard> cards,
+    DeckViewMode viewMode,
+    bool isSelectMode,
+    Set<String> selectedCards,
+    bool showCefr,
+  ) {
+    if (viewMode == DeckViewMode.stream) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: cards
+              .map((c) => _buildStreamRow(c, showCefr))
+              .toList(),
+        ),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (int i = 0; i < cards.length; i++) ...[
+          if (i > 0) const SizedBox(height: 5),
+          _buildCardItem(cards[i], viewMode, isSelectMode, selectedCards, showCefr),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCardItem(
+    FlashCard card,
+    DeckViewMode viewMode,
+    bool isSelectMode,
+    Set<String> selectedCards,
+    bool showCefr,
+  ) {
+    if (_pendingDeletes.containsKey(card.id)) {
+      return _UndoRow(
+        word: card.word,
+        onUndo: () => _undoDelete(card.id),
+      );
+    }
+
+    final collection = ref.watch(collectionByIdProvider(card.collectionId));
+
+    if (viewMode == DeckViewMode.big) {
+      final bigCard = BigWordCard(
+        word: card.word,
+        translation: card.translation,
+        exampleSentence: card.exampleSentence,
+        masteryLabel: masteryLabelFor(card),
+        collectionName: collection?.name,
+        collectionEmoji: collection?.emoji,
+        cefrLevel: card.cefrLevel,
+        showCefr: showCefr,
+        onTap: isSelectMode
+            ? () => _toggleSelect(card.id)
+            : () => context.push('/word', extra: card),
+      );
+      return isSelectMode
+          ? bigCard
+          : _SwipeToDelete(
+              onDeleted: () => _markPendingDelete(card),
+              child: bigCard,
+            );
+    }
+
+    // Standard card
+    final wordCard = WordCard(
+      key: ValueKey('wc_${card.id}'),
+      word: card.word,
+      translation: card.translation,
+      progress: cardProgress(card),
+      masteryLabel: masteryLabelFor(card),
+      nextReviewDate: card.nextReview,
+      collectionName: collection?.name,
+      collectionColor: collection?.flutterColor,
+      cefrLevel: showCefr ? card.cefrLevel : null,
+      isSelectMode: isSelectMode,
+      isSelected: selectedCards.contains(card.id),
+      onTap: isSelectMode
+          ? () => _toggleSelect(card.id)
+          : () => context.push('/word', extra: card),
+      onLongPress: isSelectMode
+          ? null
+          : () => _enterSelectMode(card.id),
+    );
+    return isSelectMode
+        ? wordCard
+        : _SwipeToDelete(
+            onDeleted: () => _markPendingDelete(card),
+            child: wordCard,
+          );
+  }
+
+  Widget _buildStreamRow(FlashCard card, bool showCefr) {
+    final collection = ref.watch(collectionByIdProvider(card.collectionId));
+    return StreamWordRow(
+      word: card.word,
+      translation: card.translation,
+      cefrLevel: card.cefrLevel,
+      masteryLabel: masteryLabelFor(card),
+      collectionEmoji: collection?.emoji,
+      showCefr: showCefr,
+      onTap: () => context.push('/word', extra: card),
     );
   }
 }
@@ -379,9 +552,7 @@ class _DeckScreenState extends ConsumerState<DeckScreen> {
 class _Header extends StatelessWidget {
   final int wordCount;
   final bool searchVisible;
-  final DeckSortOption sortOption;
   final VoidCallback onSearchToggle;
-  final ValueChanged<DeckSortOption> onSortChanged;
   final TextEditingController searchController;
   final String searchQuery;
   final ValueChanged<String> onSearchChanged;
@@ -389,9 +560,7 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.wordCount,
     required this.searchVisible,
-    required this.sortOption,
     required this.onSearchToggle,
-    required this.onSortChanged,
     required this.searchController,
     required this.searchQuery,
     required this.onSearchChanged,
@@ -408,14 +577,29 @@ class _Header extends StatelessWidget {
             children: [
               GestureDetector(
                 onTap: () => context.push('/stats'),
-                child: Text(
-                  '$wordCount words',
-                  style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.text,
-                    height: 1.1,
-                  ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      '$wordCount',
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                        height: 1.1,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'words',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const Spacer(),
@@ -425,7 +609,6 @@ class _Header extends StatelessWidget {
                     : Icons.search_rounded,
                 onTap: onSearchToggle,
               ),
-              _SortBtn(current: sortOption, onSelected: onSortChanged),
             ],
           ),
           AnimatedSize(
@@ -525,6 +708,43 @@ class _SelectHeader extends StatelessWidget {
   }
 }
 
+// ── CEFR toggle ───────────────────────────────────────────────────────────────
+
+class _CefrToggle extends StatelessWidget {
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _CefrToggle({required this.isActive, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.accentDim : AppColors.surface,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: isActive ? AppColors.accent : AppColors.surface3,
+            width: 0.5,
+          ),
+        ),
+        child: Text(
+          'CEFR',
+          style: TextStyle(
+            fontFamily: 'JetBrains Mono',
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: isActive ? AppColors.accent : AppColors.textDim,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ── Icon button ───────────────────────────────────────────────────────────────
 
 class _IconBtn extends StatelessWidget {
@@ -542,96 +762,6 @@ class _IconBtn extends StatelessWidget {
         height: 40,
         alignment: Alignment.center,
         child: Icon(icon, size: 22, color: AppColors.textMuted),
-      ),
-    );
-  }
-}
-
-// ── Sort button ───────────────────────────────────────────────────────────────
-
-class _SortBtn extends StatelessWidget {
-  final DeckSortOption current;
-  final ValueChanged<DeckSortOption> onSelected;
-
-  const _SortBtn({required this.current, required this.onSelected});
-
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<DeckSortOption>(
-      icon: const Icon(Icons.sort_rounded,
-          size: 22, color: AppColors.textMuted),
-      color: AppColors.surface2,
-      onSelected: onSelected,
-      itemBuilder: (_) => DeckSortOption.values
-          .map((opt) => PopupMenuItem<DeckSortOption>(
-                value: opt,
-                child: Row(
-                  children: [
-                    if (opt == current)
-                      const Icon(Icons.check_rounded,
-                          size: 16, color: AppColors.accent)
-                    else
-                      const SizedBox(width: 16),
-                    const SizedBox(width: 8),
-                    Text(opt.label,
-                        style: const TextStyle(color: AppColors.text)),
-                  ],
-                ),
-              ))
-          .toList(),
-    );
-  }
-}
-
-// ── Status filter pills ───────────────────────────────────────────────────────
-
-class _StatusFilterPills extends StatelessWidget {
-  final DeckStatusFilter selected;
-  final ValueChanged<DeckStatusFilter> onChanged;
-
-  const _StatusFilterPills({required this.selected, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 40,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-        children: DeckStatusFilter.values.map((f) {
-          final isSelected = selected == f;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
-              onTap: () => onChanged(f),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isSelected ? AppColors.accentDim : AppColors.surface2,
-                  borderRadius:
-                      BorderRadius.circular(AppColors.radiusFull),
-                  border: Border.all(
-                    color: isSelected
-                        ? AppColors.accent.withAlpha(80)
-                        : AppColors.surface3.withAlpha(128),
-                  ),
-                ),
-                child: Text(
-                  f.label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.w400,
-                    color:
-                        isSelected ? AppColors.accent : AppColors.textMuted,
-                  ),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
       ),
     );
   }
@@ -945,8 +1075,8 @@ class _SwipeToDeleteState extends State<_SwipeToDelete>
   Animation<double>? _snapBack;
   VoidCallback? _snapBackListener;
   bool _dismissed = false;
-  static const _deleteThreshold = 0.55; // 55% of width to trigger delete
-  static const _resistance = 0.35; // rubber-band resistance factor
+  static const _deleteThreshold = 0.55;
+  static const _resistance = 0.35;
 
   @override
   void initState() {
@@ -965,13 +1095,11 @@ class _SwipeToDeleteState extends State<_SwipeToDelete>
 
   void _onHorizontalDragUpdate(DragUpdateDetails d) {
     if (_dismissed) return;
-    // Only allow left swipe (negative delta)
     final raw = _dragOffset + d.delta.dx;
     if (raw > 0) {
       setState(() => _dragOffset = 0);
       return;
     }
-    // Apply rubber-band resistance: the further you drag, the harder it gets
     final width = context.size?.width ?? 300;
     final ratio = (_dragOffset.abs() / width).clamp(0.0, 1.0);
     final dampened = d.delta.dx * (1.0 - ratio * _resistance);
@@ -985,13 +1113,11 @@ class _SwipeToDeleteState extends State<_SwipeToDelete>
     final width = context.size?.width ?? 300;
     final ratio = _dragOffset.abs() / width;
 
-    // Remove previous listener to prevent accumulation
     if (_snapBack != null && _snapBackListener != null) {
       _snapBack!.removeListener(_snapBackListener!);
     }
 
     if (ratio >= _deleteThreshold) {
-      // Animate off screen then delete
       _dismissed = true;
       final startOffset = _dragOffset;
       _snapBack = Tween<double>(begin: startOffset, end: -width)
@@ -1002,7 +1128,6 @@ class _SwipeToDeleteState extends State<_SwipeToDelete>
         if (mounted) widget.onDeleted();
       });
     } else {
-      // Snap back with spring
       final startOffset = _dragOffset;
       _snapBack = Tween<double>(begin: startOffset, end: 0.0).animate(
         CurvedAnimation(parent: _animCtrl, curve: Curves.elasticOut),
@@ -1023,7 +1148,6 @@ class _SwipeToDeleteState extends State<_SwipeToDelete>
 
     return Stack(
       children: [
-        // Red background revealed behind
         if (showDelete)
           Positioned.fill(
             child: Container(
@@ -1044,7 +1168,6 @@ class _SwipeToDeleteState extends State<_SwipeToDelete>
               ),
             ),
           ),
-        // The card itself
         GestureDetector(
           onHorizontalDragUpdate: _onHorizontalDragUpdate,
           onHorizontalDragEnd: _onHorizontalDragEnd,
@@ -1145,398 +1268,6 @@ class _UndoRowState extends State<_UndoRow> {
           ),
         ],
       ),
-    );
-  }
-}
-
-// ── Collection island ─────────────────────────────────────────────────────────
-
-class _CollectionIsland extends ConsumerStatefulWidget {
-  final List<Collection> collections;
-  final String? selected;
-  final ValueChanged<String?> onSelected;
-
-  const _CollectionIsland({
-    required this.collections,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  @override
-  ConsumerState<_CollectionIsland> createState() => _CollectionIslandState();
-}
-
-class _CollectionIslandState extends ConsumerState<_CollectionIsland> {
-  late List<Collection> _ordered;
-  String? _pendingMoveId;
-  BuildContext? _stateContext;
-  // Key on the island container — used to get exact screen Y for menu positioning
-  final _islandKey = GlobalKey();
-
-  @override
-  void initState() {
-    super.initState();
-    _ordered = _sorted(widget.collections);
-  }
-
-  @override
-  void didUpdateWidget(_CollectionIsland old) {
-    super.didUpdateWidget(old);
-    // Re-sync if a collection was added/removed from outside
-    if (old.collections.length != widget.collections.length) {
-      _ordered = _sorted(widget.collections);
-    }
-  }
-
-  List<Collection> _sorted(List<Collection> src) =>
-      List.from(src)..sort((a, b) => a.position.compareTo(b.position));
-
-  void _onReorder(int oldIdx, int newIdx) {
-    setState(() {
-      if (newIdx > oldIdx) newIdx--;
-      final item = _ordered.removeAt(oldIdx);
-      _ordered.insert(newIdx, item);
-      _pendingMoveId = null;
-    });
-    // Persist updated positions
-    final notifier = ref.read(collectionProvider.notifier);
-    for (int i = 0; i < _ordered.length; i++) {
-      if (_ordered[i].position != i) {
-        notifier.update(_ordered[i].copyWith(position: i));
-      }
-    }
-  }
-
-  Future<void> _showContextMenu(Offset globalPos, Collection c) async {
-    final ctx = _stateContext;
-    if (ctx == null || !ctx.mounted) return;
-    HapticFeedback.mediumImpact();
-    final screen = MediaQuery.of(ctx).size;
-    // Get the island's top Y so the menu sits right above it.
-    final islandBox =
-        _islandKey.currentContext?.findRenderObject() as RenderBox?;
-    final islandTopY = islandBox != null
-        ? islandBox.localToGlobal(Offset.zero).dy
-        : globalPos.dy - 8;
-    final result = await showMenu<String>(
-      context: ctx,
-      color: AppColors.surface2,
-      elevation: 12,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      position: RelativeRect.fromLTRB(
-        (globalPos.dx - 80).clamp(8, screen.width - 168),
-        islandTopY - 104,             // menu ~100px above island top
-        (screen.width - globalPos.dx - 80).clamp(8, screen.width - 168),
-        screen.height - islandTopY + 4, // no room below → forces upward
-      ),
-      items: [
-        PopupMenuItem(
-          value: 'edit',
-          height: 40,
-          child: Row(children: [
-            const Icon(Icons.edit_outlined,
-                size: 15, color: AppColors.textMuted),
-            const SizedBox(width: 10),
-            const Text('Edit',
-                style: TextStyle(
-                    color: AppColors.text,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500)),
-          ]),
-        ),
-        const PopupMenuDivider(height: 1),
-        PopupMenuItem(
-          value: 'move',
-          height: 40,
-          child: Row(children: [
-            const Icon(Icons.open_with_rounded,
-                size: 15, color: AppColors.textMuted),
-            const SizedBox(width: 10),
-            const Text('Move',
-                style: TextStyle(
-                    color: AppColors.text,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500)),
-          ]),
-        ),
-      ],
-    );
-    if (result == 'edit') {
-      _showEditSheet(c);
-    } else if (result == 'move') {
-      setState(() => _pendingMoveId = c.id);
-      // Auto-cancel move mode after 6 s of no interaction
-      Future.delayed(const Duration(seconds: 6), () {
-        if (mounted && _pendingMoveId == c.id) {
-          setState(() => _pendingMoveId = null);
-        }
-      });
-    }
-  }
-
-  void _showEditSheet(Collection c) async {
-    HapticFeedback.mediumImpact();
-    final result = await context.push<String>('/collections/edit', extra: c);
-    if (result == 'deleted' && widget.selected == c.id) {
-      widget.onSelected(null);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    _stateContext = context;
-    final isEmpty = _ordered.isEmpty;
-
-    // Empty state: just "New Collection" + "+"
-    if (isEmpty) {
-      return ClipRRect(
-        key: _islandKey,
-        borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-          child: GestureDetector(
-            onTap: () => context.push('/collections/new'),
-            child: Container(
-              height: 70,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: AppColors.surface.withOpacity(0.94),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                    color: AppColors.surface3.withOpacity(0.4), width: 0.5),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'New Collection',
-                    style: TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 0.5,
-                    height: 36,
-                    color: AppColors.surface3.withOpacity(0.6),
-                  ),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.add_rounded,
-                      size: 20, color: AppColors.textMuted),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Build collection buttons as a list to measure if we need scrolling
-    final collectionButtons = <Widget>[];
-    for (int i = 0; i < _ordered.length; i++) {
-      final c = _ordered[i];
-      final isSelected = widget.selected == c.id;
-      final isMoveMode = _pendingMoveId == c.id;
-
-      final btn = GestureDetector(
-        onTap: () {
-          if (isMoveMode) {
-            setState(() => _pendingMoveId = null);
-          } else {
-            widget.onSelected(c.id);
-          }
-        },
-        onLongPressStart: isMoveMode
-            ? null
-            : (d) => _showContextMenu(d.globalPosition, c),
-        child: _IslandBtn(
-          label: c.name,
-          emoji: c.emoji,
-          isSelected: isSelected,
-          isMoveMode: isMoveMode,
-        ),
-      );
-
-      if (isMoveMode) {
-        collectionButtons.add(
-          ReorderableDragStartListener(
-            key: ValueKey(c.id),
-            index: i,
-            child: btn
-                .animate(onPlay: (ctrl) => ctrl.repeat(reverse: true))
-                .moveX(
-                    begin: -2.5,
-                    end: 2.5,
-                    duration: 280.ms,
-                    curve: Curves.easeInOut),
-          ),
-        );
-      } else {
-        collectionButtons.add(KeyedSubtree(key: ValueKey(c.id), child: btn));
-      }
-    }
-
-    // Estimate per-button width: ~24px padding + ~30px content ≈ 54px each
-    // "All" ≈ 50px, "+" ≈ 50px, dividers ≈ 1px each
-    const btnWidth = 54.0;
-    const fixedWidth = 50.0 + 50.0 + 1.0 + 1.0; // All + New + 2 dividers
-    final contentWidth = fixedWidth + (_ordered.length * btnWidth) + 4;
-    final maxWidth = MediaQuery.of(context).size.width - 32;
-    final isOverflowing = contentWidth > maxWidth;
-
-    return ClipRRect(
-      key: _islandKey,
-      borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          height: 70,
-          width: isOverflowing ? maxWidth : null,
-          decoration: BoxDecoration(
-            color: AppColors.surface.withOpacity(0.94),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-                color: AppColors.surface3.withOpacity(0.4), width: 0.5),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // "All" — fixed, non-reorderable
-              GestureDetector(
-                onTap: () => widget.onSelected(null),
-                child: _IslandBtn(
-                  label: 'All',
-                  icon: Icons.auto_awesome_rounded,
-                  isSelected: widget.selected == null,
-                ),
-              ),
-              // Thin divider
-              Container(
-                width: 0.5,
-                height: 36,
-                color: AppColors.surface3.withOpacity(0.6),
-              ),
-              // Collections
-              isOverflowing
-                  ? Expanded(
-                      child: ReorderableListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        buildDefaultDragHandles: false,
-                        padding: const EdgeInsets.symmetric(horizontal: 2),
-                        onReorder: _onReorder,
-                        itemCount: _ordered.length,
-                        itemBuilder: (context, i) => collectionButtons[i],
-                      ),
-                    )
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: collectionButtons,
-                    ),
-              // Thin divider
-              Container(
-                width: 0.5,
-                height: 36,
-                color: AppColors.surface3.withOpacity(0.6),
-              ),
-              // "+" — fixed, non-reorderable
-              GestureDetector(
-                onTap: () => context.push('/collections/new'),
-                child: _IslandBtn(
-                  label: 'New',
-                  icon: Icons.add_rounded,
-                  isSelected: false,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Collection edit sheet ─────────────────────────────────────────────────────
-
-
-// ── Island button ─────────────────────────────────────────────────────────────
-
-class _IslandBtn extends StatelessWidget {
-  final String label;
-  final IconData? icon;
-  final String? emoji;
-  final bool isSelected;
-  final bool isMoveMode;
-
-  const _IslandBtn({
-    required this.label,
-    this.icon,
-    this.emoji,
-    required this.isSelected,
-    this.isMoveMode = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final Color borderColor = isMoveMode
-        ? AppColors.accent.withOpacity(0.6)
-        : isSelected
-            ? AppColors.indigo.withOpacity(0.3)
-            : Colors.transparent;
-    final Color bgColor = isMoveMode
-        ? AppColors.accent.withOpacity(0.08)
-        : isSelected
-            ? AppColors.indigo.withOpacity(0.12)
-            : Colors.transparent;
-    final Color labelColor = isMoveMode
-        ? AppColors.accent
-        : isSelected
-            ? AppColors.indigo
-            : AppColors.textDim;
-
-    return AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: borderColor, width: 0.5),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null)
-              Icon(icon,
-                  size: 18,
-                  color: isMoveMode
-                      ? AppColors.accent
-                      : isSelected
-                          ? AppColors.indigo
-                          : AppColors.textMuted)
-            else
-              Text(emoji ?? '📚', style: AppTheme.emojiStyle.copyWith(fontSize: 18)),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                color: labelColor,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            // Drag-mode indicator: two small arrows
-            if (isMoveMode) ...[
-              const SizedBox(height: 2),
-              const Icon(Icons.swap_horiz_rounded,
-                  size: 10, color: AppColors.accent),
-            ],
-          ],
-        ),
     );
   }
 }
