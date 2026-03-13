@@ -129,6 +129,8 @@ screens/            UI + screen-level controllers
   auth/             Auth screens
 widgets/            Reusable UI
   feed/             All feed components (carousel, slides, reels, theme, video placeholder)
+  deck/             Vocabulary screen components (cefr_milestone_bar, collection_tabs, sort_filter_dropdown, view_mode_toggle, cefr_accordion, big_word_card, stream_word_row)
+  stats/            Stats screen components (level_hero_card, level_journey_list, level_tips_card)
   synonym_card_sheet.dart  ← translate+enrich bottom sheet for synonym cards
   word_card_detail.dart    ← unified card detail (WordCardContext enum: translateResult/inDeck/vocabularyDetail/synonymSheet)
   accordion_section.dart   ← animated expand/collapse sections (AccordionItem + AccordionContentCard)
@@ -139,7 +141,8 @@ widgets/            Reusable UI
 models/             Pure data classes (fromJson/toJson/copyWith)
 core/
   cache/            CardCache, FeedCache (SharedPreferences SWR)
-  constants/        AppConstants (env vars, lang codes, SM-2 defaults)
+  cefr/             CefrLevelCalculator (weighted scoring, level thresholds, CefrMeta)
+  constants/        AppConstants (env vars, lang codes, SM-2 defaults), LevelDefinitions (14-level progression)
   errors/           AppException, Failure types
   theme/            AppTheme
   network/          (http utils)
@@ -157,6 +160,10 @@ core/
 | `synonymChildrenProvider(cardId)` | `Set<String>` | Words already saved as children of a card |
 | `isOfflineProvider` | `bool` | Synchronous offline check |
 | `scrollToTopProvider` | `int` | Shell tab double-tap → scroll to top signal |
+| `cefrLevelProvider` | `CefrLevelResult` | Weighted CEFR level from card mastery |
+| `cefrBreakdownProvider` | `Map<String, int>` | Card count per CEFR level |
+| `deckViewModeProvider` | `DeckViewMode` | Big/standard/stream view mode |
+| `deckCefrGroupingProvider` | `bool` | CEFR accordion grouping toggle |
 
 ## Unified WordCardDetail widget
 `lib/widgets/word_card_detail.dart` — single widget for all card detail views, driven by `WordCardContext` enum:
@@ -305,36 +312,60 @@ Recents are **space-scoped**: stored under `recent_translations_{spaceId}` in Sh
 - Subtitles: "Learn" for learning lang, "Fluent" for native lang
 - `_SwapButton`: `Container(38×38, surface2, circle shape, swap_horiz icon AppColors.textDim 18px)` — no theme bg
 
-## Vocabulary screen (DeckScreen) — redesigned 2026-03-11
-No AppBar. `Scaffold(backgroundColor: AppColors.bg, body: Stack([Column, Positioned island]))`.
+## Vocabulary screen (DeckScreen) — redesigned 2026-03-13
+No AppBar. `SafeArea(bottom:false)` → `Column(_Header, Expanded(CustomScrollView))`.
 
-**Column children:**
-1. `SafeArea(bottom:false)` → `_Header` (normal) or `_SelectHeader` (select mode)
-2. `_StatusFilterPills` — All/New/Learning/Review/Mature, amber accent style
-3. `Expanded → RefreshIndicator → CustomScrollView`:
-   - `SliverToBoxAdapter` → `_TodaysFocusCarousel` (cards due within 24h)
-   - `SliverPadding → SliverList.separated` → `WordCard` tiles
-   - `SliverToBoxAdapter` → bottom spacing `(100 + safeBottom + 60)`
+**CustomScrollView slivers (in order):**
+1. `CefrMilestoneBar` — level badge + progress bar + "N to next" + info icon → `/stats`
+2. `_TodaysFocusCarousel` — cards due within 24h
+3. `CollectionTabs` — horizontal scrollable pills replacing old bottom island
+4. Toolbar row — `SortFilterDropdown` | `_CefrToggle` | `Spacer` | `ViewModeToggle`
+5. Card list — flat or CEFR-grouped depending on toggle
+6. Bottom padding
 
-**`_Header`**: "N words" (26px w700, taps→`/stats`) | search toggle | sort `PopupMenuButton` | settings icon. Search expands via `AnimatedSize`.
+**`_Header`**: "N" (28px w700) + "words" (15px w500 textMuted) | search icon. Taps → `/stats`. Search expands via `AnimatedSize`.
+
+**`CefrMilestoneBar`** (`lib/widgets/deck/cefr_milestone_bar.dart`): `ConsumerWidget` using `cefrLevelProvider`. Shows current level badge, gradient progress bar, points to next level, info button → `/stats`.
 
 **`_TodaysFocusCarousel`**: `PageView(viewportFraction:0.58)`, height 210. Active card: ProgressRing + "Review Now" → `context.go('/review')`. Inactive: dimmed, no ring. Dot indicators (active dot stretches to 16px wide).
 
-**`_CollectionIsland`**: `Positioned(bottom:82+safeBottom, left:16, right:16)`. `ConsumerStatefulWidget`. BackdropFilter blur:24, `surface@94%`, height:70, radius:16. Layout: `[All][divider][ReorderableListView horizontal][divider][+ New]`.
+**`CollectionTabs`** (`lib/widgets/deck/collection_tabs.dart`): horizontal `SingleChildScrollView` with pill-shaped tabs. Each: emoji + name + count badge, active/inactive accent styling. "+ New" tab at end → `/collections/new`.
 
-**Island interactions:**
-- Tap → select/filter
-- Long press → `showMenu` (RelativeRect pinned to screen bottom → always renders above): **Edit** | **Move**
-- Edit → navigates to `/collections/edit` full page (emoji picker grid, name field, 8-color palette, delete+confirm)
-- Move → item enters amber move-mode (`accentDim` bg, `↔` icon, shake ±2.5px via flutter_animate), `ReorderableDragStartListener` active. Tap item to cancel. Auto-cancels after 6s. On drop → `collectionProvider.notifier.update()` per changed position.
+**Toolbar:**
+- `SortFilterDropdown` (`lib/widgets/deck/sort_filter_dropdown.dart`): OverlayEntry dropdown with SORT BY (Newest/Alphabetical) + SHOW (All/New/Learning/Review/Mature) radio sections. Combined label shows current state (e.g. "Newest · Learning").
+- `_CefrToggle`: pill button toggling CEFR accordion grouping on/off (`deckCefrGroupingProvider`)
+- `ViewModeToggle` (`lib/widgets/deck/view_mode_toggle.dart`): 3-button segmented control (big/standard/stream) via `deckViewModeProvider`
+
+**View modes** (`DeckViewMode` enum in `deck_filter_providers.dart`):
+- `big` → `BigWordCard` (`lib/widgets/deck/big_word_card.dart`): word 22px, translation, example sentence (italic, bordered top), footer with CEFR + status + collection
+- `standard` → `WordCard` (`lib/widgets/word_card.dart`): progress ring, CEFR badge, collection badge, due date
+- `stream` → `StreamWordRow` (`lib/widgets/deck/stream_word_row.dart`): minimal inline row with word, translation, CEFR code, status dot, collection emoji
+
+**CEFR grouping**: `CefrAccordionGroup` (`lib/widgets/deck/cefr_accordion.dart`) — expandable sections per CEFR level with colored bar header, count, animated chevron, `AnimatedSize` body. `_expandedCefrLevels` Set in deck screen state (default: A1, A2, B1 expanded).
 
 **`WordCard`** (`lib/widgets/word_card.dart`): params: word, translation, progress(0–1), masteryLabel, nextReviewDate, collectionName, collectionColor, cefrLevel, isSelectMode, isSelected. Top row: word + CEFR badge (inline) + progress ring (or `_SelectBox`). Bottom row: `[CollectionBadge][Spacer][schedule icon][due date]`.
 
 **Helpers in `deck_controller.dart`**: `masteryLabelFor(c)`, `masteryProgressFor(c)`, `cardProgress(c)` (smooth 0–1).
 
-**New shared widget**: `lib/widgets/progress_ring.dart` — `CustomPainter` circular ring, used in WordCard and `_TodaysFocusCarousel`.
+**Shared widget**: `lib/widgets/progress_ring.dart` — `CustomPainter` circular ring, used in WordCard and `_TodaysFocusCarousel`.
 
-No CEFR filter row on screen. CEFR badge appears on each word card inline.
+## CEFR level progress system
+Weighted scoring system for language proficiency level estimation.
+
+**Scoring** (`lib/core/cefr/cefr_level_calculator.dart`):
+- `pointsForCard()`: repetitions=0 → 0.5, intervalDays<7 → 1.0, intervalDays<21 → 1.5, else → 2.0
+- Thresholds: A1=0, A2=30, B1=100, B2=250, C1=500, C2=1000
+- `CefrLevelResult`: currentLevel, nextLevel, totalPoints, progress (0–1), pointsToNext
+- `cefrLevelMeta`: map of level → `CefrMeta(name, emoji, description)`
+
+**Provider** (`lib/providers/cefr_level_provider.dart`):
+- `cefrLevelProvider` — `Provider<CefrLevelResult>` watching `cardListProvider.allCards`
+- `cefrBreakdownProvider` — card count per CEFR level
+
+**Stats page "Your Level" section** (`lib/screens/stats/stats_screen.dart`):
+- `LevelHeroCard` (`lib/widgets/stats/level_hero_card.dart`): emoji, level code (32px), name, gradient progress bar, points to next, description
+- `LevelJourneyList` (`lib/widgets/stats/level_journey_list.dart`): A1→C2 checkpoint timeline with green checkmarks (completed), amber dot (current), empty circles (future)
+- `LevelTipsCard` (`lib/widgets/stats/level_tips_card.dart`): "What moves your level up" tips card
 
 ## Review screen
 No AppBar — `SafeArea` wraps body directly. Progress bar at very top shows daily goal: `reviewsToday / dailyGoal` (persisted, resets midnight). `X / Y` label to the right of bar.
@@ -479,8 +510,8 @@ Enrich prompt uses `langName(code)` to convert ISO codes to full names (e.g. `NL
 - DB: `collections` table + `collection_id` FK on `cards` — migration `004_collections.sql` (apply in Supabase dashboard)
 - Data: `Collection` model (`emoji`, `color` hex, `position` int, `isPinned`), `CollectionCache`, `ICollectionRepository`, `SupabaseCollectionRepository`
 - Provider: `collectionProvider` (SWR, same pattern as cards), `pinnedCollectionProvider`, `collectionByIdProvider(id?)`, `collectionCardCountProvider(id?)`
-- Deck filters: `lib/providers/deck_filter_providers.dart` — `DeckStatusFilter` enum, `DeckSortOption` enum, `deckCollectionFilterProvider` (String?), `filteredDeckCardsProvider`
-- UI in deck: `_CollectionIsland` (`ConsumerStatefulWidget` in deck_screen.dart) — frosted glass island at bottom, ReorderableListView horizontal, long-press context menu (Edit/Move)
+- Deck filters: `lib/providers/deck_filter_providers.dart` — `DeckStatusFilter` enum, `DeckSortOption` enum, `DeckViewMode` enum (big/standard/stream), `deckCollectionFilterProvider` (String?), `deckCefrGroupingProvider` (bool), `filteredDeckCardsProvider`
+- UI in deck: `CollectionTabs` (horizontal pills in CustomScrollView) + `SortFilterDropdown` (OverlayEntry) + `ViewModeToggle` (segmented control) + `CefrMilestoneBar`
 - UI in translate: `CollectionSelector` widget (`lib/widgets/collection_selector.dart`) — `[+ CircleBtn] [label bubble] [▼ CircleBtn]` row with `OverlayEntry` dropdown
 - Shell: `loadCollections(userId)` called alongside `loadCards` on init
 - Router: `/collections/new` → `CreateCollectionScreen`, `/collections/edit` → `CreateCollectionScreen(collection: ...)`, `/collections/manage` → `ManageCollectionsScreen`
