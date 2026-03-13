@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/constants/app_colors.dart';
 import '../core/constants/app_constants.dart';
 
 /// Language pair selector with animated swap button.
@@ -9,6 +10,8 @@ class LanguageSelectorWidget extends StatelessWidget {
   final ValueChanged<String> onSourceChanged;
   final ValueChanged<String> onTargetChanged;
   final VoidCallback onSwap;
+  final String? sourceLabel;
+  final String? targetLabel;
 
   const LanguageSelectorWidget({
     super.key,
@@ -17,30 +20,28 @@ class LanguageSelectorWidget extends StatelessWidget {
     required this.onSourceChanged,
     required this.onTargetChanged,
     required this.onSwap,
+    this.sourceLabel,
+    this.targetLabel,
   });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.outline.withAlpha(77)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           Expanded(
-            child: _LanguageChip(
+            child: _LanguageLabel(
               langCode: sourceLang,
+              subLabel: sourceLabel,
               onTap: () => _showPicker(context, sourceLang, onSourceChanged),
             ),
           ),
           _SwapButton(onSwap: onSwap),
           Expanded(
-            child: _LanguageChip(
+            child: _LanguageLabel(
               langCode: targetLang,
+              subLabel: targetLabel,
               onTap: () => _showPicker(context, targetLang, onTargetChanged),
             ),
           ),
@@ -68,47 +69,47 @@ class LanguageSelectorWidget extends StatelessWidget {
   }
 }
 
-// ── Private: language chip ─────────────────────────────────────────────────
+// ── Private: language label ────────────────────────────────────────────────
 
-class _LanguageChip extends StatelessWidget {
+class _LanguageLabel extends StatelessWidget {
   final String langCode;
   final VoidCallback onTap;
+  final String? subLabel;
 
-  const _LanguageChip({required this.langCode, required this.onTap});
+  const _LanguageLabel({required this.langCode, required this.onTap, this.subLabel});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final flag = AppConstants.languageFlags[langCode] ?? '🌐';
     final name = AppConstants.languageNames[langCode] ?? langCode;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(flag, style: const TextStyle(fontSize: 18)),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  name,
-                  style: theme.textTheme.labelLarge,
-                  overflow: TextOverflow.ellipsis,
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              name,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: AppColors.text,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (subLabel != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                subLabel!,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.textDim,
                 ),
               ),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 16,
-                color: theme.colorScheme.outline,
-              ),
             ],
-          ),
+          ],
         ),
       ),
     );
@@ -131,7 +132,6 @@ class _SwapButtonState extends State<_SwapButton> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return GestureDetector(
       onTap: () {
         setState(() => _turns++);
@@ -141,16 +141,12 @@ class _SwapButtonState extends State<_SwapButton> {
         turns: _turns * 0.5,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primary.withAlpha(26),
-            shape: BoxShape.circle,
-          ),
+        child: const Padding(
+          padding: EdgeInsets.all(10),
           child: Icon(
             Icons.swap_horiz_rounded,
-            size: 18,
-            color: theme.colorScheme.primary,
+            size: 20,
+            color: AppColors.textDim,
           ),
         ),
       ),

@@ -20,21 +20,21 @@ class ReviewNotifier extends StateNotifier<AsyncValue<ReviewSession>> {
   ReviewNotifier(this._engine, this._ref)
       : super(const AsyncValue.data(ReviewSession(cards: [])));
 
-  /// Load due cards for [userId] and start a new session.
-  Future<void> loadSession(String userId) async {
+  /// Load due cards for [userId] scoped to [spaceId] and start a new session.
+  Future<void> loadSession(String userId, {String? spaceId}) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       final repo = _ref.read(cardRepositoryProvider);
-      final dueCards = await repo.getDueCards(userId, DateTime.now());
+      final dueCards = await repo.getDueCards(userId, DateTime.now(), spaceId: spaceId);
       return ReviewSession(cards: dueCards);
     });
   }
 
   /// Process [rating] for the current card:
   ///   1. Apply SM-2 via engine
-  ///   2. Persist updated card to Supabase
-  ///   3. Advance session index
-  Future<void> rate(ReviewRating rating) async {
+  ///   2. Update card list (optimistic: patches state + cache, writes Supabase in bg)
+  ///   3. Advance session index immediately
+  void rate(ReviewRating rating) {
     final session = state.valueOrNull;
     if (session == null || session.isComplete) return;
 
@@ -60,20 +60,16 @@ class ReviewNotifier extends StateNotifier<AsyncValue<ReviewSession>> {
       status: newStatus,
     );
 
-    // Persist (fire-and-forget is ok; card list will reload)
-    final repo = _ref.read(cardRepositoryProvider);
-    await repo.updateCard(updatedCard);
-
-    // Also update card list cache
+    // Optimistic update: patches in-memory state + cache, writes Supabase in bg
     _ref.read(cardListProvider.notifier).updateCard(updatedCard);
 
-    // Advance session
+    // Advance session immediately — no network wait
     final wasCorrect = rating.quality >= 3;
     state = AsyncValue.data(session.advance(wasCorrect: wasCorrect));
   }
 
-  /// Restart the session with the same user.
-  Future<void> restart(String userId) => loadSession(userId);
+  /// Restart the session with the same user and space.
+  Future<void> restart(String userId, {String? spaceId}) => loadSession(userId, spaceId: spaceId);
 
   CardStatus _resolveStatus(
     CardStatus current,

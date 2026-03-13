@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../modules/auth/auth_provider.dart';
 import '../../modules/cards/card_provider.dart';
+import '../../modules/spaces/space_provider.dart';
 
 // ── Notifier ───────────────────────────────────────────────────────────────
 
@@ -19,7 +20,8 @@ class StatsController extends StateNotifier<bool> {
     if (userId == null) return;
     final cards = _ref.read(cardListProvider).allCards;
     if (cards.isEmpty) {
-      await _ref.read(cardListProvider.notifier).loadCards(userId);
+      final spaceId = _ref.read(activeSpaceProvider)?.id;
+      await _ref.read(cardListProvider.notifier).loadCards(userId, spaceId: spaceId);
     }
   }
 
@@ -27,7 +29,8 @@ class StatsController extends StateNotifier<bool> {
     state = true;
     final userId = _ref.read(currentUserProvider)?.userId;
     if (userId != null) {
-      await _ref.read(cardListProvider.notifier).loadCards(userId);
+      final spaceId = _ref.read(activeSpaceProvider)?.id;
+      await _ref.read(cardListProvider.notifier).loadCards(userId, spaceId: spaceId);
     }
     state = false;
   }

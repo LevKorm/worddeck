@@ -24,12 +24,16 @@ class DeepLTranslationService implements ITranslationService {
     }
 
     try {
+      final session = _supabase.auth.currentSession;
       final response = await _supabase.functions.invoke(
         'translate',
         body: {
           'text': input.text.trim(),
           'source_lang': input.sourceLang.toUpperCase(),
           'target_lang': input.targetLang.toUpperCase(),
+        },
+        headers: {
+          if (session != null) 'Authorization': 'Bearer ${session.accessToken}',
         },
       );
 

@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/constants/app_colors.dart';
 import '../models/flash_card.dart';
+import '../modules/spaces/space_provider.dart';
+import '../providers/synonym_children_provider.dart';
+import 'cefr_badge.dart';
+import 'lang_toggle.dart';
+import 'spoiler_overlay.dart';
+import 'synonym_card_sheet.dart';
 
 /// Bottom sheet showing full card details and SM-2 stats.
 /// Height: 70%–95% of screen, draggable.
-class WordDetailSheet extends StatelessWidget {
+class WordDetailSheet extends ConsumerStatefulWidget {
   final FlashCard card;
   final VoidCallback onDelete;
 
@@ -14,8 +22,26 @@ class WordDetailSheet extends StatelessWidget {
   });
 
   @override
+  ConsumerState<WordDetailSheet> createState() => _WordDetailSheetState();
+}
+
+class _WordDetailSheetState extends ConsumerState<WordDetailSheet> {
+  bool _showNative = false;
+  bool _spoilerOn  = false;
+
+  bool get _hasNativeContent =>
+      widget.card.exampleSentenceNative != null ||
+      (widget.card.synonymsNative != null && widget.card.synonymsNative!.isNotEmpty) ||
+      widget.card.usageNotesNative != null;
+
+  @override
   Widget build(BuildContext context) {
+    final card = widget.card;
     final theme = Theme.of(context);
+    final activeSpace = ref.watch(activeSpaceProvider);
+    final sourceLang = activeSpace?.nativeLanguage ?? 'EN';
+    final targetLang = activeSpace?.learningLanguage ?? 'UK';
+    final savedSynonyms = ref.watch(synonymChildrenProvider(card.id));
     final mastery = _masteryLabel(card);
     final masteryColor = _masteryColor(mastery);
     final progress = _masteryProgress(card);
@@ -78,77 +104,220 @@ class WordDetailSheet extends StatelessWidget {
                           label: _statusLabel(card.status),
                           color: _statusColor(card.status),
                         ),
+                        if (card.cefrLevel != null) ...[
+                          const SizedBox(width: 8),
+                          CefrBadge(level: card.cefrLevel, fontSize: 11),
+                        ],
                       ],
                     ),
 
-                    const SizedBox(height: 16),
+                    // Parent link chip
+                    if (card.parentWord != null) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Icon(Icons.account_tree_rounded,
+                              size: 13,
+                              color: theme.colorScheme.onSurfaceVariant),
+                          const SizedBox(width: 6),
+                          Text(
+                            'From \u201c${card.parentWord}\u201d',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
 
-                    // Translation highlight
+                    const SizedBox(height: 12),
+
+                    // Lang toggle row
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        LangToggle(
+                          sourceLang: sourceLang,
+                          targetLang: targetLang,
+                          isNative: _showNative,
+                          hasNativeContent: _hasNativeContent,
+                          onChanged: (v) => setState(() => _showNative = v),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Translation box with embedded eye button
                     if (card.translation != null)
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.only(left: 16, top: 16, bottom: 16, right: 8),
                         decoration: BoxDecoration(
                           color: theme.colorScheme.primary.withAlpha(15),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text(
-                          card.translation!,
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                      ),
-
-                    // Example
-                    if (card.exampleSentence != null) ...[
-                      const SizedBox(height: 20),
-                      _DetailSection(
-                        icon: Icons.format_quote_rounded,
-                        title: 'Example',
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            _BoldWordText(
-                              text: card.exampleSentence!,
-                              boldWord: card.word,
-                              style: theme.textTheme.bodyLarge,
+                            Expanded(
+                              child: SpoilerOverlay(
+                                seed: 0,
+                                isHidden: _spoilerOn,
+                                child: Text(
+                                  card.translation!,
+                                  style: theme.textTheme.headlineMedium?.copyWith(
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () =>
+                                  setState(() => _spoilerOn = !_spoilerOn),
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary.withAlpha(30),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  _spoilerOn
+                                      ? Icons.visibility_off_rounded
+                                      : Icons.visibility_rounded,
+                                  size: 18,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ],
 
-                    // Synonyms
-                    if (card.synonyms != null &&
-                        card.synonyms!.isNotEmpty) ...[
-                      const SizedBox(height: 20),
-                      _DetailSection(
-                        icon: Icons.account_tree_rounded,
-                        title: 'Synonyms',
-                        child: Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: card.synonyms!
-                              .map((s) => Chip(
-                                    label: Text(s),
-                                    visualDensity: VisualDensity.compact,
-                                  ))
-                              .toList(),
-                        ),
-                      ),
-                    ],
+                    // Enrichment sections (also hidden by spoiler)
+                    SpoilerOverlay(
+                      seed: 1,
+                      isHidden: _spoilerOn,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Example
+                          if (card.exampleSentence != null) ...[
+                            const SizedBox(height: 20),
+                            _DetailSection(
+                              icon: Icons.format_quote_rounded,
+                              title: 'Example',
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 220),
+                                child: Column(
+                                  key: ValueKey(_showNative),
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _BoldWordText(
+                                      text: (_showNative &&
+                                              card.exampleSentenceNative !=
+                                                  null)
+                                          ? card.exampleSentenceNative!
+                                          : card.exampleSentence!,
+                                      boldWord: card.word,
+                                      style: theme.textTheme.bodyLarge,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
 
-                    // Usage notes
-                    if (card.usageNotes != null) ...[
-                      const SizedBox(height: 20),
-                      _DetailSection(
-                        icon: Icons.lightbulb_outline_rounded,
-                        title: 'Usage Notes',
-                        child: Text(card.usageNotes!,
-                            style: theme.textTheme.bodyMedium),
+                          // Synonyms
+                          if (card.synonyms != null &&
+                              card.synonyms!.isNotEmpty) ...[
+                            const SizedBox(height: 20),
+                            _DetailSection(
+                              icon: Icons.account_tree_rounded,
+                              title: 'Synonyms',
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 220),
+                                child: Wrap(
+                                  key: ValueKey(_showNative),
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: ((_showNative &&
+                                              card.synonymsNative != null &&
+                                              card.synonymsNative!.isNotEmpty)
+                                          ? card.synonymsNative!
+                                          : card.synonyms!)
+                                      .map((s) {
+                                        final alreadySaved = savedSynonyms
+                                            .contains(s.toLowerCase());
+                                        return ActionChip(
+                                          label: Text(s),
+                                          avatar: alreadySaved
+                                              ? Icon(Icons.check_rounded,
+                                                  size: 14,
+                                                  color:
+                                                      theme.colorScheme.primary)
+                                              : null,
+                                          backgroundColor: alreadySaved
+                                              ? theme.colorScheme.primary
+                                                  .withAlpha(20)
+                                              : null,
+                                          labelStyle: alreadySaved
+                                              ? TextStyle(
+                                                  color:
+                                                      theme.colorScheme.primary)
+                                              : null,
+                                          side: alreadySaved
+                                              ? BorderSide(
+                                                  color: theme.colorScheme
+                                                      .primary
+                                                      .withAlpha(80))
+                                              : null,
+                                          visualDensity: VisualDensity.compact,
+                                          onPressed:
+                                              alreadySaved || _showNative
+                                                  ? null
+                                                  : () => showSynonymCardSheet(
+                                                        context,
+                                                        ref,
+                                                        s,
+                                                        sourceLang,
+                                                        targetLang,
+                                                        parentCardId: card.id,
+                                                        parentWord: card.word,
+                                                      ),
+                                        );
+                                      })
+                                      .toList(),
+                                ),
+                              ),
+                            ),
+                          ],
+
+                          // Usage notes
+                          if (card.usageNotes != null) ...[
+                            const SizedBox(height: 20),
+                            _DetailSection(
+                              icon: Icons.lightbulb_outline_rounded,
+                              title: 'Usage Notes',
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 220),
+                                child: Text(
+                                  key: ValueKey(_showNative),
+                                  (_showNative &&
+                                          card.usageNotesNative != null)
+                                      ? card.usageNotesNative!
+                                      : card.usageNotes!,
+                                  style: theme.textTheme.bodyMedium,
+                                ),
+                              ),
+                            ),
+                          ],
+
+                          const SizedBox(height: 4),
+                        ],
                       ),
-                    ],
+                    ),
 
                     // Review progress
                     const SizedBox(height: 24),
@@ -231,7 +400,7 @@ class WordDetailSheet extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete word?'),
         content: Text(
-          '"${card.word}" will be permanently removed from your deck.',
+          '"${widget.card.word}" will be permanently removed from your deck.',
         ),
         actions: [
           TextButton(
@@ -248,7 +417,7 @@ class WordDetailSheet extends StatelessWidget {
       ),
     );
     if (confirmed == true) {
-      onDelete();
+      widget.onDelete();
     }
   }
 }
@@ -368,8 +537,8 @@ class _BoldWordText extends StatelessWidget {
     final base = style ?? DefaultTextStyle.of(context).style;
     final bold = base.copyWith(fontWeight: FontWeight.bold);
 
-    return RichText(
-      text: TextSpan(
+    return Text.rich(
+      TextSpan(
         style: base,
         children: [
           if (idx > 0) TextSpan(text: text.substring(0, idx)),
@@ -402,7 +571,7 @@ Color _masteryColor(String label) {
     case 'Review':
       return const Color(0xFF8B5CF6);
     case 'Mature':
-      return const Color(0xFF22C55E);
+      return AppColors.green;
     default:
       return const Color(0xFF6B7280);
   }
@@ -433,7 +602,7 @@ Color _statusColor(CardStatus s) {
     case CardStatus.learning:
       return const Color(0xFF3B82F6);
     case CardStatus.mastered:
-      return const Color(0xFF22C55E);
+      return AppColors.green;
   }
 }
 

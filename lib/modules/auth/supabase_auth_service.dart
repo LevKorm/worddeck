@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../contracts/i_auth_service.dart';
 import '../../core/errors/app_exception.dart' as app_ex;
@@ -21,7 +22,7 @@ class SupabaseAuthService implements IAuthService {
 
   const SupabaseAuthService(this._supabase);
 
-  static const String _redirectScheme = 'com.levkorm.worddeck://login-callback';
+  static const String _mobileRedirect = 'com.levkorm.worddeck://login-callback';
 
   @override
   UserProfile? get currentUser {
@@ -39,13 +40,19 @@ class SupabaseAuthService implements IAuthService {
   @override
   Future<UserProfile> signInWithGoogle() async {
     try {
+      // On web, omit redirectTo — supabase_flutter redirects back to the
+      // current page URL automatically and exchanges the auth code.
+      // On mobile, use the custom deep-link scheme.
+      const redirectTo = kIsWeb ? null : _mobileRedirect;
+
       await _supabase.auth.signInWithOAuth(
         OAuthProvider.google,
-        redirectTo: _redirectScheme,
-        authScreenLaunchMode: LaunchMode.externalApplication,
+        redirectTo: redirectTo,
+        authScreenLaunchMode:
+            kIsWeb ? LaunchMode.platformDefault : LaunchMode.externalApplication,
       );
       // At this point the browser has opened.
-      // Session is established asynchronously via deep link.
+      // Session is established asynchronously via deep link / page redirect.
       // Callers should watch authStateChanges for the signed-in UserProfile.
       final user = _supabase.auth.currentUser;
       if (user != null) return _userToProfile(user);

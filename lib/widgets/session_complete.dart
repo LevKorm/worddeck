@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../core/constants/app_colors.dart';
 
 /// Celebration widget shown when all due cards have been reviewed.
 class SessionComplete extends StatelessWidget {
@@ -10,8 +11,8 @@ class SessionComplete extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    const green = Color(0xFF22C55E);
-    const orange = Color(0xFFF5A623);
+    const green = AppColors.green;
+    const orange = AppColors.accent;
 
     return Center(
       child: Padding(

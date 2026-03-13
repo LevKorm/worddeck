@@ -1,160 +1,153 @@
 import 'package:flutter/material.dart';
+import '../core/constants/app_colors.dart';
+import 'cefr_badge.dart';
+import 'progress_ring.dart';
 
-/// Card for the Deck list showing a saved word's mastery status.
+/// Vocabulary list card — redesigned.
 ///
-/// [masteryLabel] must be one of: 'New', 'Learning', 'Review', 'Mature'
-/// [progress] is a 0.0–1.0 mastery progress value.
+/// Layout:
+///   Row(top): word (22px bold) + translation (16px muted) | progress ring / checkbox
+///   Row(bottom): collection badge (optional) | due date
 class WordCard extends StatelessWidget {
   final String word;
   final String? translation;
-  final String? partOfSpeech;
-  final String masteryLabel;
+  final double progress;       // 0.0–1.0 — drives the ring
+  final String masteryLabel;   // for ring color
   final DateTime nextReviewDate;
-  final double progress;
+  final String? collectionName;
+  final Color? collectionColor;
+  final String? cefrLevel;
+  final bool isSelectMode;
+  final bool isSelected;
   final VoidCallback onTap;
-  final VoidCallback onDelete;
+  final VoidCallback? onLongPress;
 
   const WordCard({
     super.key,
     required this.word,
     this.translation,
-    this.partOfSpeech,
+    required this.progress,
     required this.masteryLabel,
     required this.nextReviewDate,
-    required this.progress,
+    this.collectionName,
+    this.collectionColor,
+    this.cefrLevel,
+    this.isSelectMode = false,
+    this.isSelected = false,
     required this.onTap,
-    required this.onDelete,
+    this.onLongPress,
   });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = _masteryColor(masteryLabel);
+    final statusColor = _masteryColor(masteryLabel);
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.indigo.withOpacity(0.05)
+              : AppColors.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.indigo.withOpacity(0.3)
+                : AppColors.surface3.withOpacity(0.5),
+            width: 0.5,
+          ),
+        ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Left accent bar
-                  Container(width: 4, color: color),
-
-                  // Main content
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 14, 8, 12),
-                      child: Row(
+            // ── Top section: word/translation + CEFR + ring ─────────────
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          // Word + translation
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  word,
-                                  style: theme.textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
-                                ),
-                                if (translation != null) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    translation!,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ],
+                          Flexible(
+                            child: Text(
+                              word,
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.text,
+                                height: 1.2,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-
-                          const SizedBox(width: 8),
-
-                          // Right column: badges + actions
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              // Top row: part of speech + mastery badge
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (partOfSpeech != null) ...[
-                                    Text(
-                                      partOfSpeech!,
-                                      style: theme.textTheme.labelSmall
-                                          ?.copyWith(
-                                        color: theme
-                                            .colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                  ],
-                                  _StatusBadge(
-                                      label: masteryLabel, color: color),
-                                ],
-                              ),
-
-                              const SizedBox(height: 6),
-
-                              // Bottom row: next review date + actions
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.schedule_rounded,
-                                    size: 12,
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    _fmtRelDate(nextReviewDate),
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(
-                                        Icons.delete_outline_rounded,
-                                        size: 16),
-                                    color: theme.colorScheme.error
-                                        .withAlpha(179),
-                                    padding: const EdgeInsets.all(4),
-                                    constraints: const BoxConstraints(
-                                        minWidth: 28, minHeight: 28),
-                                    tooltip: 'Delete',
-                                    onPressed: onDelete,
-                                  ),
-                                  Icon(
-                                    Icons.chevron_right_rounded,
-                                    size: 16,
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
+                          if (cefrLevel != null) ...[
+                            const SizedBox(width: 6),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: CefrBadge(
+                                  level: cefrLevel, fontSize: 10),
+                            ),
+                          ],
                         ],
                       ),
-                    ),
+                      const SizedBox(height: 4),
+                      Text(
+                        translation ?? '',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.textMuted,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 12),
+                // Progress ring in normal mode; checkbox in select mode
+                isSelectMode
+                    ? _SelectBox(isSelected: isSelected)
+                    : ProgressRing(
+                        progress: progress,
+                        color: statusColor,
+                        size: 42,
+                      ),
+              ],
             ),
 
-            // Progress bar at bottom
-            LinearProgressIndicator(
-              value: progress.clamp(0.0, 1.0),
-              minHeight: 3,
-              backgroundColor: color.withAlpha(26),
-              valueColor: AlwaysStoppedAnimation<Color>(color),
+            const SizedBox(height: 12),
+
+            // ── Bottom meta row ───────────────────────────────────────────
+            Row(
+              children: [
+                if (collectionName != null) ...[
+                  _CollectionBadge(
+                    name: collectionName!,
+                    color: collectionColor,
+                  ),
+                ],
+                const Spacer(),
+                const Icon(
+                  Icons.schedule_rounded,
+                  size: 11,
+                  color: AppColors.textDim,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _fmtRelDate(nextReviewDate),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textDim,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -163,48 +156,72 @@ class WordCard extends StatelessWidget {
   }
 }
 
-// ── Status badge ───────────────────────────────────────────────────────────
+// ── Sub-widgets ──────────────────────────────────────────────────────────────
 
-class _StatusBadge extends StatelessWidget {
-  final String label;
-  final Color color;
-
-  const _StatusBadge({required this.label, required this.color});
+class _SelectBox extends StatelessWidget {
+  final bool isSelected;
+  const _SelectBox({required this.isSelected});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: isSelected
+            ? AppColors.indigo.withOpacity(0.15)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? AppColors.indigo : AppColors.textDim,
+          width: 1.5,
+        ),
+      ),
+      child: isSelected
+          ? const Icon(Icons.check_rounded, size: 20, color: AppColors.indigo)
+          : null,
+    );
+  }
+}
+
+class _CollectionBadge extends StatelessWidget {
+  final String name;
+  final Color? color;
+  const _CollectionBadge({required this.name, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? AppColors.textDim;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withAlpha(26),
-        borderRadius: BorderRadius.circular(999),
+        color: c.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(5),
       ),
       child: Text(
-        label,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: color,
+        name,
+        style: TextStyle(
+          fontSize: 10,
           fontWeight: FontWeight.w600,
+          color: c,
         ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 Color _masteryColor(String label) {
   switch (label) {
-    case 'New':
-      return const Color(0xFF6B7280);
-    case 'Learning':
-      return const Color(0xFFF97316);
-    case 'Review':
-      return const Color(0xFF8B5CF6);
-    case 'Mature':
-      return const Color(0xFF22C55E);
-    default:
-      return const Color(0xFF6B7280);
+    case 'New':      return AppColors.textMuted;
+    case 'Learning': return AppColors.accent;
+    case 'Review':   return AppColors.indigo;
+    case 'Mature':   return AppColors.green;
+    default:         return AppColors.textDim;
   }
 }
 
@@ -218,7 +235,7 @@ String _fmtRelDate(DateTime d) {
   if (diff == 1) return 'Tomorrow';
   const m = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
   ];
   return '${m[d.month - 1]} ${d.day}';
 }

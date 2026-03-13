@@ -1,10 +1,14 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../core/constants/app_colors.dart';
+import 'cefr_badge.dart';
+import 'lang_toggle.dart';
 
 /// 3D flip flashcard used in the review session.
 ///
 /// The flip animation is driven by the [isFlipped] prop:
 /// flip state is owned by the parent; this widget only animates the change.
+/// Tapping the card toggles between front and back.
 class ReviewCard extends StatefulWidget {
   final String word;
   final String? ipa;
@@ -14,16 +18,16 @@ class ReviewCard extends StatefulWidget {
   final String? exampleTranslation;
   final List<String>? synonyms;
   final String? usageNotes;
-
-  /// Whether the card is currently showing the back (answer) side.
+  final String? exampleNative;
+  final List<String>? synonymsNative;
+  final String? usageNotesNative;
+  final String sourceLang;
+  final String targetLang;
   final bool isFlipped;
-
-  /// Called when the user taps the card to flip it.
   final VoidCallback onFlip;
-
-  /// Short AI hint shown on the front (e.g. "verb • formal register").
-  /// Not the definition — just enough context to jog memory.
   final String? contextDescription;
+  final String? cefrLevel;
+  final void Function(String synonym)? onSynonymTap;
 
   const ReviewCard({
     super.key,
@@ -35,9 +39,16 @@ class ReviewCard extends StatefulWidget {
     this.exampleTranslation,
     this.synonyms,
     this.usageNotes,
+    this.exampleNative,
+    this.synonymsNative,
+    this.usageNotesNative,
+    this.sourceLang = 'EN',
+    this.targetLang = 'UK',
     required this.isFlipped,
     required this.onFlip,
     this.contextDescription,
+    this.cefrLevel,
+    this.onSynonymTap,
   });
 
   @override
@@ -48,6 +59,12 @@ class _ReviewCardState extends State<ReviewCard>
     with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
   late Animation<double> _anim;
+  bool _showNative = false;
+
+  bool get _hasNativeContent =>
+      widget.exampleNative != null ||
+      (widget.synonymsNative != null && widget.synonymsNative!.isNotEmpty) ||
+      widget.usageNotesNative != null;
 
   @override
   void initState() {
@@ -82,116 +99,83 @@ class _ReviewCardState extends State<ReviewCard>
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onFlip,
-      child: AnimatedBuilder(
-        animation: _anim,
-        builder: (ctx, _) {
-          final angle = _anim.value * pi;
-          final isFront = angle < pi / 2;
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (ctx, _) {
+        final angle = _anim.value * pi;
+        final isFront = angle < pi / 2;
 
-          return Transform(
-            alignment: Alignment.center,
-            transform: Matrix4.identity()
-              ..setEntry(3, 2, 0.001)
-              ..rotateY(angle),
-            child: isFront
-                ? _buildFront(ctx)
-                : Transform(
-                    alignment: Alignment.center,
-                    transform: Matrix4.identity()..rotateY(pi),
+        return Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.identity()
+            ..setEntry(3, 2, 0.001)
+            ..rotateY(angle),
+          child: isFront
+              ? GestureDetector(
+                  onTap: widget.onFlip,
+                  child: _buildFront(ctx),
+                )
+              : Transform(
+                  alignment: Alignment.center,
+                  transform: Matrix4.identity()..rotateY(pi),
+                  child: GestureDetector(
+                    onTap: widget.onFlip,
                     child: _buildBack(ctx),
                   ),
-          );
-        },
-      ),
+                ),
+        );
+      },
     );
   }
 
   // ── Front side ─────────────────────────────────────────────────────────
 
   Widget _buildFront(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-            color: theme.colorScheme.outline.withAlpha(51)),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.primary.withAlpha(13),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.surface3, width: 0.5),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.translate_rounded,
-            size: 32,
-            color: theme.colorScheme.onSurfaceVariant.withAlpha(128),
-          ),
-          const SizedBox(height: 24),
+          const Spacer(flex: 2),
 
           // Word
           Text(
             widget.word,
-            style: theme.textTheme.displayLarge
-                ?.copyWith(fontWeight: FontWeight.w700),
+            style: const TextStyle(
+              fontSize: 36,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text,
+              height: 1.2,
+            ),
             textAlign: TextAlign.center,
           ),
 
           // IPA
           if (widget.ipa != null) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             Text(
               widget.ipa!,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+              style: const TextStyle(
+                fontSize: 16,
+                color: AppColors.textMuted,
                 fontStyle: FontStyle.italic,
               ),
             ),
           ],
 
-          // Part of speech badge
-          if (widget.partOfSpeech != null) ...[
+          // CEFR badge
+          if (widget.cefrLevel != null) ...[
             const SizedBox(height: 12),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withAlpha(20),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                widget.partOfSpeech!,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+            CefrBadge(level: widget.cefrLevel, fontSize: 11),
           ],
 
-          // Context hint
-          if (widget.contextDescription != null) ...[
-            const SizedBox(height: 16),
-            Text(
-              widget.contextDescription!,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-
-          const Spacer(),
+          const Spacer(flex: 3),
 
           // Tap hint
           Row(
@@ -199,14 +183,15 @@ class _ReviewCardState extends State<ReviewCard>
             children: [
               Icon(
                 Icons.touch_app_rounded,
-                size: 16,
-                color: theme.colorScheme.onSurfaceVariant.withAlpha(128),
+                size: 14,
+                color: AppColors.textDim.withAlpha(120),
               ),
               const SizedBox(width: 6),
               Text(
-                'Tap to flip',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant.withAlpha(128),
+                'Tap to reveal',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textDim.withAlpha(120),
                 ),
               ),
             ],
@@ -219,101 +204,180 @@ class _ReviewCardState extends State<ReviewCard>
   // ── Back side ───────────────────────────────────────────────────────────
 
   Widget _buildBack(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(32),
+      constraints: const BoxConstraints.expand(),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(24),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-            color: theme.colorScheme.primary.withAlpha(77)),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.primary.withAlpha(20),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+          color: AppColors.accent.withAlpha(40),
+          width: 0.5,
+        ),
       ),
       child: SingleChildScrollView(
+        padding: const EdgeInsets.all(28),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Translation
+            // Small word label at top
+            Text(
+              widget.word,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textDim,
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Translation — big and prominent
             Text(
               widget.translation,
-              style: theme.textTheme.displayLarge?.copyWith(
-                color: theme.colorScheme.primary,
+              style: const TextStyle(
+                fontSize: 32,
                 fontWeight: FontWeight.w700,
+                color: AppColors.accent,
+                height: 1.2,
               ),
               textAlign: TextAlign.center,
             ),
 
+            // Lang toggle
+            if (_hasNativeContent) ...[
+              const SizedBox(height: 16),
+              LangToggle(
+                sourceLang: widget.sourceLang,
+                targetLang: widget.targetLang,
+                isNative: _showNative,
+                hasNativeContent: _hasNativeContent,
+                onChanged: (v) => setState(() => _showNative = v),
+              ),
+            ],
+
             // Example sentence
             if (widget.example != null) ...[
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withAlpha(13),
+                  color: AppColors.surface2,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Column(
-                  children: [
-                    _BoldWordText(
-                      text: widget.example!,
-                      boldWord: widget.word,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        height: 1.5,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    if (widget.exampleTranslation != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        widget.exampleTranslation!,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  child: Column(
+                    key: ValueKey(_showNative),
+                    children: [
+                      _BoldWordText(
+                        text: (_showNative && widget.exampleNative != null)
+                            ? widget.exampleNative!
+                            : widget.example!,
+                        boldWord: widget.word,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: AppColors.text,
+                          height: 1.5,
                         ),
                         textAlign: TextAlign.center,
                       ),
                     ],
-                  ],
+                  ),
                 ),
               ),
             ],
 
             // Synonyms
-            if (widget.synonyms != null &&
-                widget.synonyms!.isNotEmpty) ...[
+            if (widget.synonyms != null && widget.synonyms!.isNotEmpty) ...[
               const SizedBox(height: 16),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                alignment: WrapAlignment.center,
-                children: widget.synonyms!
-                    .map((s) => Chip(
-                          label: Text(s),
-                          visualDensity: VisualDensity.compact,
-                        ))
-                    .toList(),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: Wrap(
+                  key: ValueKey(_showNative),
+                  spacing: 6,
+                  runSpacing: 6,
+                  alignment: WrapAlignment.center,
+                  children: ((_showNative &&
+                              widget.synonymsNative != null &&
+                              widget.synonymsNative!.isNotEmpty)
+                          ? widget.synonymsNative!
+                          : widget.synonyms!)
+                      .map((s) {
+                    final tappable =
+                        !_showNative && widget.onSynonymTap != null;
+                    return GestureDetector(
+                      onTap: tappable ? () => widget.onSynonymTap!(s) : null,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: tappable
+                              ? AppColors.accentDim
+                              : AppColors.surface2,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: tappable
+                                ? AppColors.accent.withAlpha(60)
+                                : AppColors.surface3,
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Text(
+                          s,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: tappable
+                                ? AppColors.accent
+                                : AppColors.textMuted,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
               ),
             ],
 
             // Usage notes
             if (widget.usageNotes != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                widget.usageNotes!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+              const SizedBox(height: 16),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: Text(
+                  key: ValueKey(_showNative),
+                  (_showNative && widget.usageNotesNative != null)
+                      ? widget.usageNotesNative!
+                      : widget.usageNotes!,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textMuted,
+                    height: 1.5,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
               ),
             ],
+
+            const SizedBox(height: 16),
+
+            // Tap hint
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.touch_app_rounded,
+                  size: 14,
+                  color: AppColors.textDim.withAlpha(120),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Tap to flip back',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textDim.withAlpha(120),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -346,19 +410,18 @@ class _BoldWordText extends StatelessWidget {
     final base = style ?? DefaultTextStyle.of(context).style;
     final bold = base.copyWith(fontWeight: FontWeight.bold);
 
-    return RichText(
-      textAlign: textAlign,
-      text: TextSpan(
+    return Text.rich(
+      TextSpan(
         style: base,
         children: [
           if (idx > 0) TextSpan(text: text.substring(0, idx)),
           TextSpan(
-              text: text.substring(idx, idx + boldWord.length),
-              style: bold),
+              text: text.substring(idx, idx + boldWord.length), style: bold),
           if (idx + boldWord.length < text.length)
             TextSpan(text: text.substring(idx + boldWord.length)),
         ],
       ),
+      textAlign: textAlign,
     );
   }
 }

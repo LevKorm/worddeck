@@ -2,34 +2,50 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers':
     'authorization, x-client-info, apikey, content-type',
 }
 
-// Exact prompt from the Flutter GeminiEnrichmentService._buildPrompt()
+const langNames: Record<string, string> = {
+  EN: 'English', UK: 'Ukrainian', RU: 'Russian', DE: 'German',
+  FR: 'French',  ES: 'Spanish',  IT: 'Italian', PT: 'Portuguese',
+  PL: 'Polish',  NL: 'Dutch',    JA: 'Japanese', ZH: 'Chinese',
+  KO: 'Korean',  AR: 'Arabic',   TR: 'Turkish',  SV: 'Swedish',
+  DA: 'Danish',  FI: 'Finnish',  NB: 'Norwegian', CS: 'Czech',
+  SK: 'Slovak',  HU: 'Hungarian', RO: 'Romanian', BG: 'Bulgarian',
+  EL: 'Greek',   LT: 'Lithuanian', LV: 'Latvian', ET: 'Estonian',
+}
+
+function langName(code: string): string {
+  return langNames[code.toUpperCase()] ?? code.toUpperCase()
+}
+
 function buildPrompt(
   word: string,
   language: string,
   translation?: string,
   targetLang?: string,
 ): string {
-  const translationLine =
-    translation
-      ? `Translation: "${translation}"\nTarget language: ${targetLang ?? ''}`
-      : ''
+  const hasTranslation = !!(translation && targetLang)
 
-  return `You are a linguistics expert. Given a word and its translation, return a JSON object with exactly these fields:
-- "transcription": IPA phonetic transcription of the source word
-- "example_sentence": a natural, everyday example sentence using the word (not overly complex)
-- "synonyms": array of 3–5 synonyms of the source word (in the source language)
-- "usage_notes": 1–2 sentence note covering when/how to use the word, common collocations, register (formal/informal), or easily confused similar words
-- "did_you_mean": if the source word appears to have a typo or spelling error, provide the likely intended correct word as a string; otherwise null
+  const srcName = langName(language)
+  const tgtName = hasTranslation ? langName(targetLang!) : ''
 
-Source language: ${language}
-Word: "${word}"
-${translationLine}
+  const nativePlaceholder = hasTranslation
+    ? `"example_sentence_native":"<translate example_sentence to ${tgtName}>","synonyms_native":["<equivalent word in ${tgtName}>"],"usage_notes_native":"<translate usage_notes to ${tgtName}>"`
+    : `"example_sentence_native":null,"synonyms_native":null,"usage_notes_native":null`
 
-Respond with ONLY valid JSON. No markdown, no code fences, no explanation.`
+  const context = hasTranslation
+    ? `Word: "${word}" (${srcName} → ${tgtName}: "${translation}")`
+    : `Word: "${word}" (${srcName})`
+
+  return `${context}
+
+Fill this JSON for the word above:
+{"transcription":"<IPA>","example_sentence":"<short natural sentence in ${srcName}>","example_sentences":["<3 different short natural sentences in ${srcName} using the word>"],"synonyms":["<3-5 ${srcName} synonyms>"],"synonyms_enriched":[{"word":"<synonym>","level":"<A1|A2|B1|B2|C1|C2>"}],"usage_notes":"<1-2 sentences in ${srcName}: register, collocations, confusables>","usage_notes_list":["<2-3 distinct usage notes in ${srcName}: register, collocations, confusables, each 1 sentence>"],"grammar":{"type":"<grammatical category with gender/class, e.g. Feminine noun, Transitive verb>","pattern":"<key inflection patterns, pluralization, conjugation notes>","related":"<derived/related word forms with parts of speech>"},"did_you_mean":<null, or the correct ${srcName} spelling if the word has a typo>,"cefr_level":"<A1|A2|B1|B2|C1|C2>",${nativePlaceholder}}
+
+Return only the filled JSON. No markdown.`
 }
 
 Deno.serve(async (req: Request) => {
@@ -41,21 +57,7 @@ Deno.serve(async (req: Request) => {
   try {
     // ── Auth ─────────────────────────────────────────────────────────────────
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } },
-    )
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -95,8 +97,10 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
-            temperature: 0.3,
+            temperature: 0.1,
+            maxOutputTokens: 1024,
             responseMimeType: 'application/json',
+            thinkingConfig: { thinkingBudget: 0 },
           },
         }),
       },
@@ -134,6 +138,12 @@ Deno.serve(async (req: Request) => {
         status: 502,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
+    }
+
+    // Sanitize cefr_level — only allow valid values
+    const validCefr = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
+    if (enrichment.cefr_level && !validCefr.includes(enrichment.cefr_level as string)) {
+      enrichment.cefr_level = null
     }
 
     return new Response(JSON.stringify(enrichment), {

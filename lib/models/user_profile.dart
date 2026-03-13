@@ -50,9 +50,9 @@ class UserProfile {
         notifMaxHour:     json['notif_max_hour'] as int? ?? 22,
         notifFrequency:   json['notif_frequency'] as String? ?? 'medium',
         pushSubscription: json['push_subscription'] as Map<String, dynamic>?,
-        createdAt: DateTime.parse(json['created_at'] as String),
+        createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
         notifLastSent: json['notif_last_sent'] != null
-            ? DateTime.parse(json['notif_last_sent'] as String)
+            ? DateTime.tryParse(json['notif_last_sent'] as String)
             : null,
       );
 

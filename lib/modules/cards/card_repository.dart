@@ -40,15 +40,23 @@ class SupabaseCardRepository implements ICardRepository {
       final data = await _supabase
           .from(_table)
           .insert({
-            'user_id':          card.userId,
-            'word':             card.word,
-            'translation':      card.translation,
-            'transcription':    card.transcription,
-            'example_sentence': card.exampleSentence,
-            'synonyms':         card.synonyms ?? [],
-            'usage_notes':      card.usageNotes,
-            'status':           'learning',
-            'next_review':      DateTime.now().toIso8601String(),
+            'user_id':                 card.userId,
+            'word':                    card.word,
+            'translation':             card.translation,
+            'transcription':           card.transcription,
+            'example_sentence':        card.exampleSentence,
+            'synonyms':                card.synonyms ?? [],
+            'usage_notes':             card.usageNotes,
+            'example_sentence_native': card.exampleSentenceNative,
+            'synonyms_native':         card.synonymsNative ?? [],
+            'usage_notes_native':      card.usageNotesNative,
+            'parent_card_id':          card.parentCardId,
+            'parent_word':             card.parentWord,
+            'collection_id':           card.collectionId,
+            'space_id':                card.spaceId,
+            'cefr_level':              card.cefrLevel,
+            'status':                  'learning',
+            'next_review':             DateTime.now().toIso8601String(),
             // SM-2 defaults (ease_factor, interval_days, repetitions use DB defaults)
           })
           .select()
@@ -60,15 +68,18 @@ class SupabaseCardRepository implements ICardRepository {
   }
 
   // ── getAllCards ───────────────────────────────────────────────────────────
-  /// SELECT all cards for [userId], ordered by created_at DESC.
+  /// SELECT all cards for [userId], scoped to [spaceId] when provided.
   @override
-  Future<List<FlashCard>> getAllCards(String userId) async {
+  Future<List<FlashCard>> getAllCards(String userId, {String? spaceId}) async {
     try {
-      final data = await _supabase
+      var query = _supabase
           .from(_table)
           .select()
-          .eq('user_id', userId)
-          .order('created_at', ascending: false);
+          .eq('user_id', userId);
+      if (spaceId != null) {
+        query = query.eq('space_id', spaceId);
+      }
+      final data = await query.order('created_at', ascending: false);
       return (data as List).map((e) => FlashCard.fromJson(e as Map<String, dynamic>)).toList();
     } catch (e) {
       throw DatabaseException('Failed to fetch cards', cause: e);
@@ -80,15 +91,16 @@ class SupabaseCardRepository implements ICardRepository {
   /// ordered by next_review ASC (most overdue first).
   /// Matches Next.js GET /api/cards?due=true logic.
   @override
-  Future<List<FlashCard>> getDueCards(String userId, DateTime now) async {
+  Future<List<FlashCard>> getDueCards(String userId, DateTime now, {String? spaceId}) async {
     try {
-      final data = await _supabase
+      var query = _supabase
           .from(_table)
           .select()
           .eq('user_id', userId)
           .lte('next_review', now.toIso8601String())
-          .neq('status', 'mastered')
-          .order('next_review');
+          .neq('status', 'mastered');
+      if (spaceId != null) query = query.eq('space_id', spaceId);
+      final data = await query.order('next_review');
       return (data as List).map((e) => FlashCard.fromJson(e as Map<String, dynamic>)).toList();
     } catch (e) {
       throw DatabaseException('Failed to fetch due cards', cause: e);
@@ -104,16 +116,21 @@ class SupabaseCardRepository implements ICardRepository {
       final data = await _supabase
           .from(_table)
           .update({
-            'translation':      card.translation,
-            'transcription':    card.transcription,
-            'example_sentence': card.exampleSentence,
-            'synonyms':         card.synonyms ?? [],
-            'usage_notes':      card.usageNotes,
-            'status':           card.status.value,
-            'ease_factor':      card.easeFactor,
-            'interval_days':    card.intervalDays,
-            'repetitions':      card.repetitions,
-            'next_review':      card.nextReview.toIso8601String(),
+            'translation':             card.translation,
+            'transcription':           card.transcription,
+            'example_sentence':        card.exampleSentence,
+            'synonyms':                card.synonyms ?? [],
+            'usage_notes':             card.usageNotes,
+            'example_sentence_native': card.exampleSentenceNative,
+            'synonyms_native':         card.synonymsNative ?? [],
+            'usage_notes_native':      card.usageNotesNative,
+            'collection_id':           card.collectionId,
+            'cefr_level':              card.cefrLevel,
+            'status':                  card.status.value,
+            'ease_factor':             card.easeFactor,
+            'interval_days':           card.intervalDays,
+            'repetitions':             card.repetitions,
+            'next_review':             card.nextReview.toIso8601String(),
           })
           .eq('id', card.id)
           .eq('user_id', card.userId)

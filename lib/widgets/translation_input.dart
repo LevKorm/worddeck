@@ -8,12 +8,14 @@ import 'package:flutter/material.dart';
 class TranslationInputField extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSubmit;
+  final VoidCallback? onClear;
   final bool isLoading;
 
   const TranslationInputField({
     super.key,
     required this.controller,
     required this.onSubmit,
+    this.onClear,
     this.isLoading = false,
   });
 
@@ -48,7 +50,10 @@ class TranslationInputField extends StatelessWidget {
                       icon: const Icon(Icons.close_rounded, size: 18),
                       color: theme.colorScheme.onSurfaceVariant,
                       tooltip: 'Clear',
-                      onPressed: controller.clear,
+                      onPressed: () {
+                        controller.clear();
+                        onClear?.call();
+                      },
                     ),
                   isLoading
                       ? const Padding(

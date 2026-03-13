@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/constants/level_definitions.dart';
 import '../models/app_statistics.dart';
 import '../modules/cards/card_provider.dart';
 
@@ -173,6 +174,31 @@ final sessionStatsProvider =
     StateNotifierProvider<SessionStatsNotifier, SessionStats>(
   (ref) => SessionStatsNotifier(),
 );
+
+/// Current level definition based on word count.
+final levelProvider = Provider.autoDispose<LevelDef>((ref) {
+  final cards = ref.watch(cardListProvider).allCards;
+  return getLevelForWords(cards.length);
+});
+
+/// Progress within the current level (0.0–1.0).
+final levelProgressProvider = Provider.autoDispose<double>((ref) {
+  final cards = ref.watch(cardListProvider).allCards;
+  return getLevelProgress(cards.length);
+});
+
+/// CEFR level breakdown: level → count of cards at that level.
+/// Only includes levels that have at least 1 card.
+final cefrBreakdownProvider = Provider.autoDispose<Map<String, int>>((ref) {
+  final cards = ref.watch(cardListProvider).allCards;
+  final breakdown = <String, int>{};
+  for (final card in cards) {
+    if (card.cefrLevel != null) {
+      breakdown[card.cefrLevel!] = (breakdown[card.cefrLevel!] ?? 0) + 1;
+    }
+  }
+  return breakdown;
+});
 
 /// Full statistics combining card data + session data.
 final fullStatisticsProvider = Provider.autoDispose<AppStatistics>((ref) {

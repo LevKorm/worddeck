@@ -6,6 +6,7 @@ import '../../core/constants/app_constants.dart';
 import '../../modules/auth/auth_provider.dart';
 import '../../modules/cards/card_provider.dart';
 import '../../modules/notifications/notification_provider.dart';
+import '../../modules/spaces/space_provider.dart';
 import '../../providers/statistics_provider.dart';
 import '../../providers/theme_provider.dart';
 
@@ -61,16 +62,21 @@ class SettingsController extends StateNotifier<SettingsState> {
 
   SettingsController(this._ref) : super(const SettingsState()) {
     _load();
+    // Reload whenever the signed-in user changes (logout → new login)
+    _ref.listen(currentUserProvider, (previous, next) {
+      if (next?.userId != previous?.userId) _load();
+    });
   }
 
   Future<void> _load() async {
+    final userId      = _ref.read(currentUserProvider)?.userId;
     final prefs       = await SharedPreferences.getInstance();
     final notifState  = _ref.read(notificationSettingsProvider);
     final sessionState = _ref.read(sessionStatsProvider);
 
     state = SettingsState(
-      iSpeakLang:     prefs.getString('i_speak')      ?? AppConstants.defaultNativeLanguage,
-      imLearningLang: prefs.getString('im_learning')  ?? AppConstants.defaultLearningLanguage,
+      iSpeakLang:     prefs.getString('i_speak_$userId')     ?? AppConstants.defaultNativeLanguage,
+      imLearningLang: prefs.getString('im_learning_$userId') ?? AppConstants.defaultLearningLanguage,
       themeMode:      _ref.read(themeModeProvider),
       dailyGoal:      sessionState.dailyGoal,
       pushEnabled:    notifState.enabled,
@@ -84,14 +90,16 @@ class SettingsController extends StateNotifier<SettingsState> {
 
   Future<void> updateISpeakLang(String lang) async {
     state = state.copyWith(iSpeakLang: lang);
+    final userId = _ref.read(currentUserProvider)?.userId;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('i_speak', lang);
+    await prefs.setString('i_speak_$userId', lang);
   }
 
   Future<void> updateImLearningLang(String lang) async {
     state = state.copyWith(imLearningLang: lang);
+    final userId = _ref.read(currentUserProvider)?.userId;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('im_learning', lang);
+    await prefs.setString('im_learning_$userId', lang);
   }
 
   // ── Appearance ────────────────────────────────────────────────────────────
@@ -165,7 +173,8 @@ class SettingsController extends StateNotifier<SettingsState> {
     final userId = _ref.read(currentUserProvider)?.userId;
     if (userId == null) return;
     await _ref.read(cardRepositoryProvider).clearAllCards(userId);
-    await _ref.read(cardListProvider.notifier).loadCards(userId);
+    final spaceId = _ref.read(activeSpaceProvider)?.id;
+    await _ref.read(cardListProvider.notifier).loadCards(userId, spaceId: spaceId);
   }
 
   // ── Account ───────────────────────────────────────────────────────────────

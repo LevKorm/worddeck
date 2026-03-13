@@ -1,7 +1,7 @@
 name: worddeck
 description: Learn new words with smart flashcards powered by AI and spaced repetition.
 publish_to: 'none'
-version: 1.0.0+1
+version: 2.1.1+1
 
 environment:
   sdk: '>=3.5.0 <4.0.0'
@@ -62,3 +62,10 @@ flutter:
   uses-material-design: true
   assets:
     - .env
+  fonts:
+    - family: JetBrains Mono
+      fonts:
+        - asset: fonts/JetBrainsMono-Regular.ttf
+          weight: 400
+        - asset: fonts/JetBrainsMono-SemiBold.ttf
+          weight: 600

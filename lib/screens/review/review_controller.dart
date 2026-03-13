@@ -6,6 +6,7 @@ import '../../modules/auth/auth_provider.dart';
 import '../../modules/cards/card_provider.dart';
 import '../../modules/notifications/notification_provider.dart';
 import '../../modules/review/review_provider.dart';
+import '../../modules/spaces/space_provider.dart';
 import '../../providers/statistics_provider.dart';
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -44,15 +45,16 @@ class ReviewController extends StateNotifier<ReviewControllerState> {
     state = state.copyWith(isLoading: true);
     final userId = _ref.read(currentUserProvider)?.userId;
     if (userId != null) {
-      await _ref.read(reviewProvider.notifier).loadSession(userId);
+      final spaceId = _ref.read(activeSpaceProvider)?.id;
+      await _ref.read(reviewProvider.notifier).loadSession(userId, spaceId: spaceId);
     }
     state = state.copyWith(isLoading: false);
   }
 
-  void flipCard() => state = state.copyWith(isFlipped: true);
+  void flipCard() => state = state.copyWith(isFlipped: !state.isFlipped);
 
   Future<void> rateCard(ReviewRating rating) async {
-    await _ref.read(reviewProvider.notifier).rate(rating);
+    _ref.read(reviewProvider.notifier).rate(rating);
     await _ref.read(sessionStatsProvider.notifier).recordReview();
 
     state = state.copyWith(

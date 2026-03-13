@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../core/constants/app_colors.dart';
 import '../models/review_rating.dart';
 
 /// The four SM-2 rating buttons shown after revealing a review card.
@@ -133,12 +134,12 @@ class _RatingButtonState extends State<_RatingButton>
 Color _ratingColor(ReviewRating r) {
   switch (r) {
     case ReviewRating.again:
-      return const Color(0xFFEF4444);
+      return AppColors.ratingAgain;
     case ReviewRating.hard:
-      return const Color(0xFFF59E0B);
+      return AppColors.ratingHard;
     case ReviewRating.good:
-      return const Color(0xFF22C55E);
+      return AppColors.ratingGood;
     case ReviewRating.easy:
-      return const Color(0xFF10B981);
+      return AppColors.ratingEasy;
   }
 }

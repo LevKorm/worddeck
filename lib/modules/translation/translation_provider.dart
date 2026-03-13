@@ -3,12 +3,15 @@ import '../../contracts/i_translation_service.dart';
 import '../../models/word_input.dart';
 import '../../models/translation_result.dart';
 import '../../modules/auth/auth_provider.dart';
-import 'deepl_translation_service.dart';
+// ignore: unused_import
+import 'deepl_translation_service.dart'; // kept — switch back by swapping the line below
+import 'gemini_translation_service.dart';
 
 final translationServiceProvider = Provider<ITranslationService>((ref) {
-  return DeepLTranslationService(
-    supabase: ref.read(supabaseClientProvider),
-  );
+  // ── Active: Gemini Flash 2.5 translation ──────────────────────────────────
+  return GeminiTranslationService(supabase: ref.read(supabaseClientProvider));
+  // ── Inactive: DeepL (swap above line with this to revert) ─────────────────
+  // return DeepLTranslationService(supabase: ref.read(supabaseClientProvider));
 });
 
 // ── Translation state ─────────────────────────────────────────────────────────

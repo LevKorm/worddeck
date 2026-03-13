@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -50,8 +51,11 @@ class _NotificationBootstrapState
         await ref.read(notificationSettingsProvider.notifier).setEnabled(true);
         // Permission request happens inside the service on Settings screen;
         // here we just flip the preference so it shows as enabled.
-      } catch (_) {
-        // Firebase not configured — silently skip
+      } catch (e) {
+        // Firebase not configured — skip notification setup
+        if (kDebugMode) {
+          debugPrint('[Notifications] Firebase init skipped: $e');
+        }
       }
     }
   }

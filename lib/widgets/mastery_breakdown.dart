@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/constants/app_colors.dart';
 
 /// Horizontal bar chart showing the four mastery levels.
 class MasteryBreakdown extends StatelessWidget {
@@ -50,7 +51,7 @@ class MasteryBreakdown extends StatelessWidget {
           label: 'Mature',
           count: matureCount,
           total: total,
-          color: const Color(0xFF22C55E),
+          color: AppColors.green,
         ),
       ],
     );

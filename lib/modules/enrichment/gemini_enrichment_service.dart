@@ -19,8 +19,8 @@ class GeminiEnrichmentService implements IEnrichmentService {
   Future<EnrichmentResult> enrich(String word, String language) =>
       _callEnrich(word: word, language: language);
 
-  /// Extended version used by TranslatePipelineNotifier — passes translation
-  /// context for a better prompt (matches the original Next.js behavior).
+  /// Extended version — passes translation context for a richer prompt.
+  @override
   Future<EnrichmentResult> enrichWithTranslation({
     required String word,
     required String translation,
@@ -48,7 +48,14 @@ class GeminiEnrichmentService implements IEnrichmentService {
         if (targetLang != null) 'target_lang': targetLang,
       };
 
-      final response = await _supabase.functions.invoke('enrich', body: body);
+      final session = _supabase.auth.currentSession;
+      final response = await _supabase.functions.invoke(
+        'enrich',
+        body: body,
+        headers: {
+          if (session != null) 'Authorization': 'Bearer ${session.accessToken}',
+        },
+      );
 
       final data = response.data;
       if (data == null) {

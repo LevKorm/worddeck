@@ -52,4 +52,10 @@ class AppConstants {
     'CS': '🇨🇿', 'DA': '🇩🇰', 'FI': '🇫🇮', 'EL': '🇬🇷', 'HU': '🇭🇺',
     'ID': '🇮🇩', 'NB': '🇳🇴', 'RO': '🇷🇴', 'SK': '🇸🇰', 'SV': '🇸🇪',
   };
+
+  static String flagForCode(String code) =>
+      languageFlags[code.toUpperCase()] ?? '🌐';
+
+  static String languageDisplayName(String code) =>
+      languageNames[code.toUpperCase()] ?? code.toUpperCase();
 }

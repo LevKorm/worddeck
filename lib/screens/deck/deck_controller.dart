@@ -1,30 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../models/flash_card.dart';
 import '../../modules/auth/auth_provider.dart';
 import '../../modules/cards/card_provider.dart';
+import '../../modules/spaces/space_provider.dart';
+import '../../models/flash_card.dart';
 
 // ── State ──────────────────────────────────────────────────────────────────
 
 class DeckControllerState {
   final String searchQuery;
 
-  /// 'All' | 'New' | 'Learning' | 'Review' | 'Mature'
-  final String masteryFilter;
+  const DeckControllerState({this.searchQuery = ''});
 
-  const DeckControllerState({
-    this.searchQuery   = '',
-    this.masteryFilter = 'All',
-  });
-
-  DeckControllerState copyWith({
-    String? searchQuery,
-    String? masteryFilter,
-  }) =>
-      DeckControllerState(
-        searchQuery:   searchQuery   ?? this.searchQuery,
-        masteryFilter: masteryFilter ?? this.masteryFilter,
-      );
+  DeckControllerState copyWith({String? searchQuery}) =>
+      DeckControllerState(searchQuery: searchQuery ?? this.searchQuery);
 }
 
 // ── Notifier ───────────────────────────────────────────────────────────────
@@ -37,17 +26,19 @@ class DeckController extends StateNotifier<DeckControllerState> {
   Future<void> loadCards() async {
     final userId = _ref.read(currentUserProvider)?.userId;
     if (userId == null) return;
-    await _ref.read(cardListProvider.notifier).loadCards(userId);
+    final spaceId = _ref.read(activeSpaceProvider)?.id;
+    await _ref.read(cardListProvider.notifier).loadCards(userId, spaceId: spaceId);
   }
-
-  void setFilter(String filter) =>
-      state = state.copyWith(masteryFilter: filter);
 
   void setSearch(String query) =>
       state = state.copyWith(searchQuery: query);
 
   Future<void> deleteCard(String cardId) async {
     await _ref.read(cardListProvider.notifier).deleteCard(cardId);
+  }
+
+  void restoreCard(FlashCard card) {
+    _ref.read(cardListProvider.notifier).restoreCard(card);
   }
 
   Future<void> clearAll() async {
@@ -58,19 +49,12 @@ class DeckController extends StateNotifier<DeckControllerState> {
   }
 }
 
-// ── Providers ──────────────────────────────────────────────────────────────
+// ── Provider ───────────────────────────────────────────────────────────────
 
 final deckControllerProvider =
     StateNotifierProvider<DeckController, DeckControllerState>(
   (ref) => DeckController(ref),
 );
-
-/// Filtered + searched card list, derived from cardListProvider + deckController.
-final filteredDeckCardsProvider = Provider<List<FlashCard>>((ref) {
-  final allCards = ref.watch(cardListProvider).allCards;
-  final deckState = ref.watch(deckControllerProvider);
-  return _applyFilter(allCards, deckState.masteryFilter, deckState.searchQuery);
-});
 
 // ── Mastery helpers ────────────────────────────────────────────────────────
 
@@ -88,22 +72,11 @@ double masteryProgressFor(FlashCard c) {
   return 1.0;
 }
 
-List<FlashCard> _applyFilter(
-    List<FlashCard> cards, String filter, String query) {
-  var result = cards;
-
-  if (filter != 'All') {
-    result = result.where((c) => masteryLabelFor(c) == filter).toList();
-  }
-
-  if (query.isNotEmpty) {
-    final q = query.toLowerCase();
-    result = result
-        .where((c) =>
-            c.word.toLowerCase().contains(q) ||
-            (c.translation?.toLowerCase().contains(q) ?? false))
-        .toList();
-  }
-
-  return result;
+/// Smooth 0.0–1.0 progress value for the circular ring on word cards.
+double cardProgress(FlashCard c) {
+  if (c.repetitions == 0) return 0.0;
+  final d = c.intervalDays;
+  if (d < 7)  return (d / 7.0).clamp(0.0, 1.0);
+  if (d < 21) return 0.33 + ((d - 7) / 14.0 * 0.34).clamp(0.0, 0.34);
+  return (0.67 + ((d - 21) / 60.0).clamp(0.0, 1.0) * 0.33).clamp(0.0, 1.0);
 }
